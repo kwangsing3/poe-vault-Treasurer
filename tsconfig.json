@@ -1,15 +1,49 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "commonjs",
-    "allowJs": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "noImplicitAny": true,
+    /* 語言與環境 */
+    "target": "ES2023", /* Node 20+ 支援 ES2023；Node 22+ 可改 ES2024 */
+    "module": "ESNext", /* 程式由 Vite/esbuild 打包，型別檢查以 ESM 為準 */
+    "moduleResolution": "Bundler", /* Vite 打包專案：以 bundler 解析，允許 ESM import/export 語法 */
+    "lib": [
+      "ES2023"
+    ], /* main 進程僅需 ES 標準庫；renderer 的 DOM 型別由 vite/client 另行提供 */
+    /* 輸出設定 */
+    "outDir": "./build",
+    "rootDir": "./src",
     "sourceMap": true,
-    "baseUrl": ".",
-    "outDir": "dist",
-    "moduleResolution": "node",
-    "resolveJsonModule": true
-  }
+    "declaration": true,
+    "declarationMap": true,
+    /* 編譯效能 */
+    "incremental": true, /* 啟用增量編譯，加速 tsc 後續執行 */
+    "tsBuildInfoFile": "./build/tsconfig.tsbuildinfo", /* 狀態檔放進 build/，與產物同生死，避免刪 build 後 tsc 空轉不 emit */
+    /* 互通性約束 */
+    "esModuleInterop": true, /* 已隱含 allowSyntheticDefaultImports，不需重複設定 */
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true, /* TS 5.0+：取代 isolatedModules，強制正確使用 import type */
+    /* 型別檢查 */
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "exactOptionalPropertyTypes": true, /* 嚴格區分 undefined 與「屬性不存在」*/
+    "noPropertyAccessFromIndexSignature": true, /* 強制用 [] 存取 index signature */
+    /* 其他 */
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/**/*",
+    "forge.env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "build"
+  ]
 }

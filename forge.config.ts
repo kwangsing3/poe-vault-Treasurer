@@ -14,7 +14,10 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerSquirrel({}),
-    new MakerZIP({}, ['darwin']),
+    // ZIP of the full packaged app (the complete runnable .exe + its
+    // resources) for every platform, so releases ship a portable build
+    // alongside the Squirrel installer.
+    new MakerZIP({}, ['darwin', 'win32', 'linux']),
     new MakerRpm({}),
     new MakerDeb({}),
   ],

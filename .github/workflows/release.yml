@@ -36,5 +36,6 @@ jobs:
           generate_release_notes: true
           files: |
             out/make/**/*.exe
+            out/make/**/*.zip
             out/make/**/*.nupkg
             out/make/**/RELEASES
