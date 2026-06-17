@@ -1,4 +1,4 @@
-import { formatTotal } from './data';
+import { formatStashTotal } from './stash';
 import { store, subscribe } from './store';
 import { overview } from './views/overview';
 import { detail } from './views/detail';
@@ -45,7 +45,7 @@ function topbar(route: Route): string {
       <div class="nav">${nav}</div>
       <div class="asset-pill">
         <span class="lbl">總資產</span>
-        <span class="val">${formatTotal(store.baseCurrency)}</span>
+        <span class="val">${formatStashTotal(store.baseCurrency)}</span>
       </div>
     </div>`;
 }

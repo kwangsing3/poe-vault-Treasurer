@@ -29,13 +29,21 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 **in-memory store**，所以換頁不重載、跨頁狀態不中斷。所有顯示文字一律用**繁體中文**。
 
 - `theme.css` — 設計系統（色票 / 字體 / 卡片 / 各頁樣式）
-- `data.ts` — mock 資料（取自線框 renderVals）
+- `data.ts` — 線框雜項 mock（稀有度色票 / 詞綴 / 比價列 等）
+- `stash.ts` — **自動生成**的 mock 倉庫資料（~660 件，名稱與通貨圖示取自
+  `mock/trade-data`，價值/數量為 mock）。提供 `STASH_ITEMS`、`tabItems`、
+  `searchItems`、`formatStashTotal` 等。重生請用 `.gen-stash.mjs`（一次性，不留 repo）。
 - `store.ts` — 共用狀態（`subscribe` / `update`）
-- `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈
+- `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈；頂部「總資產」走 `formatStashTotal`
 - `views/` — `overview` / `detail` / `search` / `report` / `settings` 五頁，各匯出 `View`
   （`render(): string` + 選用 `mount(root)`）
 
-線框原檔每頁有 A（高密度）/ B（低密度）兩版，目前只做了 A。
+慣例與重點：
+- **倉庫頁尺寸**：一般頁 12×12，巨型頁（PoE Quad Tab）24×24；目前 06/07/08 為巨型
+  （見 `overview.ts` 的 `GIANT_TABS`）。
+- **物品圖示**：僅通貨/碎片有真實圖（CDN `web.poecdn.com`，離線會載不出）；裝備用稀有度色塊。
+- 全站「總資產 / 估值合計」一律以 `stash.ts` 的實際資料計算，跨頁一致。
+- 線框原檔每頁有 A（高密度）/ B（低密度）兩版，目前只做了 A。
 
 ## PoE 參考資料（trade API static data）
 

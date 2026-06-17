@@ -9,6 +9,7 @@ export const detail: View = {
     const name = sel?.name ?? '未選擇物品';
     const color = sel ? RARITY_COLOR[sel.rarity] : '#a39f96';
     const rarity = sel ? RARITY_LABEL[sel.rarity] : '—';
+    const base = sel?.base ?? '—';
 
     const mods = MODS.map(
       (m) => `<div class="mod-row"><span class="pip"></span><span style="font:500 13px/1 var(--sans);">${m}</span></div>`,
@@ -40,7 +41,7 @@ export const detail: View = {
             <div class="art">ITEM ART</div>
             <div style="display:flex;flex-direction:column;gap:6px;">
               <span class="serif" style="font-size:26px;color:${color};">${name}</span>
-              <span class="kicker" style="letter-spacing:0.1em;">${rarity} · 頭部護甲 · 物品等級 84</span>
+              <span class="kicker" style="letter-spacing:0.1em;">${rarity} · ${base} · 物品等級 84</span>
             </div>
           </div>
           <div class="detail-data">

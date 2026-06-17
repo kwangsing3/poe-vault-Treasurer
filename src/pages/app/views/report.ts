@@ -2,10 +2,10 @@ import {
   buildHistoryBars,
   CURRENCY_META,
   CURRENCY_ROWS,
-  formatTotal,
   RARITY_COLOR,
   TOTAL_DIV,
 } from '../data';
+import { STASH_ITEMS, formatStashTotal } from '../stash';
 import { store } from '../store';
 import type { View } from '../router';
 
@@ -14,7 +14,7 @@ const bars = buildHistoryBars();
 export const report: View = {
   render() {
     const meta = CURRENCY_META[store.baseCurrency];
-    const total = formatTotal(store.baseCurrency).replace('≈ ', '');
+    const total = formatStashTotal(store.baseCurrency).replace('≈ ', '');
 
     const curRows = CURRENCY_ROWS.map(
       (c) => `
@@ -50,7 +50,7 @@ export const report: View = {
             </div>
             <div class="kpi">
               <span class="kicker">已識別物品</span>
-              <span class="big">482</span>
+              <span class="big">${STASH_ITEMS.length}</span>
               <span class="muted" style="font:500 11px/1.4 var(--sans);">跨 8 個倉庫頁</span>
             </div>
             <div class="kpi">

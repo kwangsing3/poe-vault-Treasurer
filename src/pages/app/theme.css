@@ -314,6 +314,28 @@ body {
   border: 1px solid rgba(43, 42, 39, 0.25);
 }
 .cell.filled.sel { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cell .item-img { width: 84%; height: 84%; object-fit: contain; }
+
+/* 巨型倉庫頁 · PoE Quad Tab 24×24 */
+.stash-grid.giant { grid-template-columns: repeat(24, 19px); gap: 4px; }
+.stash-grid.giant .cell { width: 19px; height: 19px; border-radius: 3px; }
+.stash-grid.giant .cell .item { width: 13px; height: 13px; border-radius: 3px; }
+
+/* 倉庫頁的巨型標記 */
+.tab-item .badge {
+  margin-left: auto;
+  font: 600 9px/1 var(--sans);
+  letter-spacing: 0.04em;
+  color: var(--panel);
+  background: var(--r-unique);
+  border-radius: 4px;
+  padding: 3px 5px;
+}
+.tab-item.active .badge { background: var(--panel); color: var(--ink); }
+
+/* 銘牌的物品圖示 */
+.art.has-img { background: var(--panel-2); }
+.art.has-img img { max-width: 78%; max-height: 78%; object-fit: contain; }
 
 .plaque {
   width: 300px;

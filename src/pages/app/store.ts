@@ -3,14 +3,22 @@
  *
  * 整個 app 是單一 renderer 視窗的 SPA，換頁時只會抽換 content 區、不重載頁面，
  * 所以這個 module-level 物件的內容在跨頁面時不會中斷（符合需求）。
- * 功能本身先不要求正確，重點是狀態連續性。
  */
 
 import type { BaseCurrency, Rarity } from './data';
+import { STASH_ITEMS, type StashItem } from './stash';
 
 export interface SelectedItem {
   name: string;
   rarity: Rarity;
+  base?: string | undefined;
+  value?: number | undefined; // 混沌石
+  stack?: number | undefined;
+  icon?: string | undefined;
+}
+
+export function toSelected(it: StashItem): SelectedItem {
+  return { name: it.name, rarity: it.rarity, base: it.base, value: it.value, stack: it.stack, icon: it.icon };
 }
 
 export interface AppState {
@@ -28,9 +36,11 @@ export interface AppState {
   autoSync: boolean;
 }
 
+const first = STASH_ITEMS[0];
+
 export const store: AppState = {
-  activeTab: 2,
-  selectedItem: { name: '灰焰之冠', rarity: 'rare' },
+  activeTab: 1,
+  selectedItem: first ? toSelected(first) : null,
   searchQuery: '',
   filters: new Set<string>(['稀有度::稀有']),
   baseCurrency: 'D',
