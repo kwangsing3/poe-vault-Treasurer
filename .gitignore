@@ -95,6 +95,6 @@ out/
 dist/
 
 # Editor / IDE
-.vscode/
+
 .idea/
 *.swp
