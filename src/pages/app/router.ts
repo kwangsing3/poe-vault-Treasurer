@@ -1,5 +1,6 @@
 import { formatStashTotal, loadLeagueVault } from './stash';
 import { loadUniquePrices, setPriceResolveHook } from './prices';
+import { scheduleSnapshots } from './networth';
 import { store, subscribe, update } from './store';
 import { overview } from './views/overview';
 import { detail } from './views/detail';
@@ -105,7 +106,9 @@ export function syncLeague(force = false): void {
     store.lastSync = Date.now();
     render();
     // 背景估價：不阻塞 UI，價格陸續寫入快取（無 session 時一律「未知」）。
-    void loadUniquePrices(store.league);
+    loadUniquePrices(store.league);
+    // 啟動每小時淨資產快照（用已載入的估價；切聯盟時更新對象）。
+    scheduleSnapshots(store.league);
   });
 }
 

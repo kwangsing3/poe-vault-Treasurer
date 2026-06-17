@@ -38,6 +38,9 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 - `prices.ts` — 傳奇估價（背景）：經 `window.poe.getItemPrice` 走 trade search，**去離群取中位數**，
   同一次請求同時得混沌石 + 神聖石價。單一 worker 的**查價佇列**（支援插隊到最前）；價格依聯盟
   存進 `localStorage`、超過 1 小時視為過期重查。
+- `networth.ts` — 淨資產估值與走勢。`valuation()` **只計已估價真實資產**（目前=傳奇），每件只歸到
+  「主流幣別」分別累加成混沌石/神聖石總額（不換算、不重複計），並產出分類小計。每小時對當前聯盟
+  快照存 `localStorage`，最多保留 30 天、逾期丟棄（供報表走勢圖）。
 - `store.ts` — 共用狀態（`subscribe` / `update`，含 `lastSync`）
 - `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈；`switchLeague` / `syncLeague` 換聯盟並重載 vault +
   背景估價；頂部「總資產」走 `formatStashTotal`

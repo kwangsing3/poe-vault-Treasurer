@@ -51,6 +51,8 @@ export interface AppState {
   autoSync: boolean;
   /** 上次成功同步倉庫的時間戳（ms）；尚未同步為 null */
   lastSync: number | null;
+  /** 報表走勢的時間級距 */
+  trendRange: '24h' | '7d' | '30d';
 }
 
 /** 聯盟清單的離線後備（抓取失敗時使用） */
@@ -68,6 +70,7 @@ export const store: AppState = {
   leagues: [...LEAGUES],
   autoSync: true,
   lastSync: null,
+  trendRange: '7d',
 };
 
 /** 訂閱者：狀態變更後要重繪的回呼（由 router 註冊） */

@@ -215,6 +215,25 @@ export function priceLinesHTML(state: PriceState | undefined): string {
   return `${rows}<span style="display:block;color:var(--muted-2);font:500 11px/1.4 var(--sans);">${relativeTime(state.fetchedAt)}</span>`;
 }
 
+/**
+ * 取一件物品的「主流幣別」單價：掛單較多的幣別（chaos / divine），用於加總而不重複計入兩邊。
+ * 兩種皆無則回 null。
+ */
+export function dominantPrice(d: PriceData): { currency: 'chaos' | 'divine'; amount: number } | null {
+  let chaosCount = 0;
+  let divineCount = 0;
+  for (const l of d.listings) {
+    if (l.currency === 'chaos') chaosCount++;
+    else if (l.currency === 'divine') divineCount++;
+  }
+  const preferDivine = divineCount > chaosCount;
+  if (preferDivine && d.divine !== null) return { currency: 'divine', amount: d.divine };
+  if (!preferDivine && d.chaos !== null) return { currency: 'chaos', amount: d.chaos };
+  if (d.chaos !== null) return { currency: 'chaos', amount: d.chaos };
+  if (d.divine !== null) return { currency: 'divine', amount: d.divine };
+  return null;
+}
+
 /** 把單筆掛單格式化（原始幣別）。 */
 export function formatListing(l: PriceListing): string {
   const amt = Number.isInteger(l.amount) ? l.amount : l.amount.toFixed(1);
