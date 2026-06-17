@@ -30,18 +30,21 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 
 - `theme.css` — 設計系統（色票 / 字體 / 卡片 / 各頁樣式）
 - `data.ts` — 線框雜項 mock（稀有度色票 / 詞綴 / 比價列 等）
-- `stash.ts` — **自動生成**的 mock 倉庫資料（~660 件，名稱與通貨圖示取自
-  `mock/trade-data`，價值/數量為 mock）。提供 `STASH_ITEMS`、`tabItems`、
-  `searchItems`、`formatStashTotal` 等。重生請用 `.gen-stash.mjs`（一次性，不留 repo）。
+- `stash.ts` — **自動生成**的倉庫資料，來源為 `mock/stash/get-stash-items-tab0.json`
+  （真實 `get-stash-items` 回應；名稱/圖示/座標/堆疊皆真實，僅 `value` 為 mock）。
+  提供 `STASH_TABS`(36 頁)、`STASH_ITEMS`(tab 0 共 332 件，含 `x/y/w/h/icon/frame`)、
+  `tabItems`、`searchItems`、`tabSize`、`formatStashTotal` 等。重生請用 `.gen-realstash.mjs`
+  （一次性，不留 repo）。**在做真正帳號連結前，一律以這份 mock 為資料源。**
 - `store.ts` — 共用狀態（`subscribe` / `update`）
 - `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈；頂部「總資產」走 `formatStashTotal`
 - `views/` — `overview` / `detail` / `search` / `report` / `settings` 五頁，各匯出 `View`
   （`render(): string` + 選用 `mount(root)`）
 
 慣例與重點：
-- **倉庫頁尺寸**：一般頁 12×12，巨型頁（PoE Quad Tab）24×24；目前 06/07/08 為巨型
-  （見 `overview.ts` 的 `GIANT_TABS`）。
-- **物品圖示**：僅通貨/碎片有真實圖（CDN `web.poecdn.com`，離線會載不出）；裝備用稀有度色塊。
+- **倉庫頁尺寸**：依分頁類型，`QuadStash` 為 24×24，其餘 12×12（見 `tabSize()`）。
+  總覽以真實 `x/y/w/h` 在深色格線上定位物品、顯示堆疊數，外觀比照遊戲內倉庫。
+- **物品圖示**：stash 回應每件都帶真實 `icon`（CDN `webtw.poecdn.com`，離線會載不出）。
+- 目前只抓了 tab 0 的物品，其他分頁顯示空格 + 提示。
 - 全站「總資產 / 估值合計」一律以 `stash.ts` 的實際資料計算，跨頁一致。
 - 線框原檔每頁有 A（高密度）/ B（低密度）兩版，目前只做了 A。
 

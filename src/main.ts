@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 
@@ -6,6 +6,20 @@ import started from "electron-squirrel-startup";
 if (started) {
   app.quit();
 }
+
+// 公用聯盟清單：在主進程抓（Node fetch 無 CORS 限制），失敗回傳 null 讓 renderer 用後備清單。
+ipcMain.handle("poe:leagues", async () => {
+  try {
+    const res = await fetch("https://pathofexile.tw/api/trade/data/leagues", {
+      headers: { "user-agent": "poe-vault-treasurer" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { result?: unknown };
+    return Array.isArray(data.result) ? data.result : null;
+  } catch {
+    return null;
+  }
+});
 
 const createWindow = () => {
   // Create the browser window.
@@ -25,6 +39,7 @@ const createWindow = () => {
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
   }
+
 };
 
 // This method will be called when Electron has finished

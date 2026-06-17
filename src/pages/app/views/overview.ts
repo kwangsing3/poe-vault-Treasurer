@@ -1,53 +1,69 @@
 import { RARITY_COLOR, RARITY_LABEL } from '../data';
-import { STASH_ITEMS, formatChaos, formatStashTotal, searchItems, tabItems, type StashItem } from '../stash';
+import {
+  STASH_ITEMS,
+  STASH_TABS,
+  formatChaos,
+  formatStashTotal,
+  searchItems,
+  tabItems,
+  tabSize,
+  type StashItem,
+} from '../stash';
 import { store, toSelected, update } from '../store';
 import { navigate } from '../router';
 import type { View } from '../router';
 
-const TABS = Array.from({ length: 8 }, (_, i) => i + 1);
-/** 巨型倉庫頁（PoE Quad Tab）：24×24 = 576 格；一般頁：12×12 = 144 格 */
-const GIANT_TABS = new Set([6, 7, 8]);
-const NORMAL_CAP = 12 * 12;
-const GIANT_CAP = 24 * 24;
+const QUAD_CELL = 30; // px
+const NORMAL_CELL = 46; // px
 
-function isGiantView(): boolean {
-  return !store.searchQuery.trim() && GIANT_TABS.has(store.activeTab);
+function isSearching(): boolean {
+  return store.searchQuery.trim().length > 0;
 }
 
-function shownItems(): StashItem[] {
-  const q = store.searchQuery.trim();
-  return q ? searchItems(q) : tabItems(store.activeTab);
+function itemHTML(it: StashItem, positioned: boolean): string {
+  const sel = it.name === store.selectedItem?.name ? 'sel' : '';
+  const pos = positioned
+    ? `grid-column:${it.x + 1}/span ${it.w};grid-row:${it.y + 1}/span ${it.h};`
+    : '';
+  const stack = it.stack !== undefined ? `<span class="stack">${it.stack}</span>` : '';
+  return `<div class="gitem ${sel}" style="${pos}--rc:${RARITY_COLOR[it.rarity]};" data-id="${it.id}" title="${it.name}">
+    <img src="${it.icon}" alt="${it.name}" loading="lazy" />${stack}
+  </div>`;
 }
 
-function cellInner(it: StashItem): string {
-  if (it.icon) return `<img class="item-img" src="${it.icon}" alt="${it.name}" loading="lazy" />`;
-  return `<div class="item" style="background:${RARITY_COLOR[it.rarity]};"></div>`;
-}
+function gridHTML(): string {
+  const tab = store.activeTab;
+  const n = tabSize(tab);
+  const cell = n >= 24 ? QUAD_CELL : NORMAL_CELL;
 
-function gridHTML(shown: StashItem[]): string {
-  const baseCap = isGiantView() ? GIANT_CAP : NORMAL_CAP;
-  const cap = Math.max(baseCap, shown.length);
-  const selName = store.selectedItem?.name;
-  const cells: string[] = [];
-  for (let i = 0; i < cap; i++) {
-    const it = shown[i];
-    if (!it) { cells.push('<div class="cell"></div>'); continue; }
-    const sel = it.name === selName ? 'sel' : '';
-    cells.push(`<div class="cell filled ${sel}" data-id="${it.id}" title="${it.name}">${cellInner(it)}</div>`);
+  if (isSearching()) {
+    const found = searchItems(store.searchQuery);
+    const items = found.map((it) => itemHTML(it, false)).join('');
+    return `<div class="real-grid search" style="--cell:${NORMAL_CELL}px;--n:12;">
+      <div class="rg-flow">${items || '<span class="rg-empty">沒有符合的物品</span>'}</div>
+    </div>`;
   }
-  return cells.join('');
+
+  const items = tabItems(tab);
+  const bg = Array.from({ length: n * n }, () => '<div class="gcell"></div>').join('');
+  const gitems = items.map((it) => itemHTML(it, true)).join('');
+  const empty = items.length === 0 ? '<div class="rg-hint">此頁尚未抓取資料（目前僅同步 tab 0）</div>' : '';
+  return `<div class="real-grid" style="--cell:${cell}px;--n:${n};">
+    <div class="rg-bg">${bg}</div>
+    <div class="rg-items">${gitems}</div>
+    ${empty}
+  </div>`;
 }
 
-function gridClass(): string {
-  return isGiantView() ? 'stash-grid giant' : 'stash-grid';
-}
-
-function footerHTML(shown: StashItem[]): string {
-  const q = store.searchQuery.trim();
-  const scope = q
-    ? `符合「${q}」`
-    : `倉庫頁 ${String(store.activeTab).padStart(2, '0')}${GIANT_TABS.has(store.activeTab) ? ' · 巨型 24×24' : ''}`;
-  return `${scope} · ${shown.length} 件 · 全庫 ${STASH_ITEMS.length} 件 · 估值合計 ${formatStashTotal(store.baseCurrency)}`;
+function footerHTML(): string {
+  if (isSearching()) {
+    const found = searchItems(store.searchQuery);
+    return `符合「${store.searchQuery.trim()}」· ${found.length} 件 · 全庫 ${STASH_ITEMS.length} 件 · 估值合計 ${formatStashTotal(store.baseCurrency)}`;
+  }
+  const t = STASH_TABS.find((x) => x.i === store.activeTab);
+  const items = tabItems(store.activeTab);
+  const label = t ? `${t.n} · ${t.quad ? '巨型 24×24' : '一般 12×12'}` : `分頁 ${store.activeTab}`;
+  return `${label} · ${items.length} 件 · 全庫 ${STASH_ITEMS.length} 件 · 估值合計 ${formatStashTotal(store.baseCurrency)}`;
 }
 
 function plaque(): string {
@@ -69,8 +85,8 @@ function plaque(): string {
       <span class="kicker">選中物品 · 銘牌</span>
       ${art}
       <div style="display:flex;flex-direction:column;gap:5px;">
-        <span class="serif" style="font-size:22px;color:${color};">${sel?.name ?? '未選擇'}</span>
-        <span class="kicker" style="letter-spacing:0.1em;">${sub}</span>
+        <span class="serif" style="font-size:21px;color:${color};">${sel?.name ?? '未選擇'}</span>
+        <span class="kicker" style="letter-spacing:0.08em;">${sub}</span>
       </div>
       <div class="divider"></div>
       <div style="display:flex;align-items:baseline;justify-content:space-between;">
@@ -83,12 +99,12 @@ function plaque(): string {
 
 export const overview: View = {
   render() {
-    const shown = shownItems();
-    const tabs = TABS.map((t) => {
-      const active = t === store.activeTab && !store.searchQuery.trim() ? 'active' : '';
-      const badge = GIANT_TABS.has(t) ? '<span class="badge">巨</span>' : '';
-      return `<div class="tab-item ${active}" data-tab="${t}">
-        <span class="sq"></span><span>${String(t).padStart(2, '0')}</span>${badge}
+    const tabs = STASH_TABS.map((t) => {
+      const active = t.i === store.activeTab && !isSearching() ? 'active' : '';
+      const dot = `rgb(${t.r},${t.g},${t.b})`;
+      const badge = t.quad ? '<span class="badge">巨</span>' : '';
+      return `<div class="tab-item ${active}" data-tab="${t.i}">
+        <span class="sq" style="background:${dot};"></span><span class="tn">${t.n}</span>${badge}
       </div>`;
     }).join('');
 
@@ -100,17 +116,16 @@ export const overview: View = {
       <div class="panel">
         <div class="overview">
           <div class="tab-rail">
-            <span class="lbl">倉庫頁</span>
+            <span class="lbl">倉庫頁 · ${STASH_TABS.length}</span>
             ${tabs}
-            <div class="tab-add">+ 通貨 / 碎片</div>
           </div>
           <div class="grid-area">
             <div class="grid-tools">
               <input class="search-box" id="ov-search" placeholder="⌕  搜尋物品 / 基底…" />
               <div class="btn" style="height:30px;">價值 ↓</div>
             </div>
-            <div class="${gridClass()}" id="ov-grid">${gridHTML(shown)}</div>
-            <div class="hand" id="ov-footer" style="font-size:16px;">${footerHTML(shown)}</div>
+            <div class="grid-wrap" id="ov-grid">${gridHTML()}</div>
+            <div class="hand" id="ov-footer" style="font-size:16px;">${footerHTML()}</div>
           </div>
           ${plaque()}
         </div>
@@ -131,12 +146,8 @@ export const overview: View = {
     };
 
     const refreshGrid = () => {
-      const shown = shownItems();
-      if (gridEl) {
-        gridEl.className = gridClass();
-        gridEl.innerHTML = gridHTML(shown);
-      }
-      if (footerEl) footerEl.textContent = footerHTML(shown);
+      if (gridEl) gridEl.innerHTML = gridHTML();
+      if (footerEl) footerEl.textContent = footerHTML();
       wireCells();
     };
 
@@ -144,7 +155,7 @@ export const overview: View = {
     if (search) {
       search.value = store.searchQuery;
       search.addEventListener('input', () => {
-        store.searchQuery = search.value; // 不走 update()，避免重繪導致輸入框失焦
+        store.searchQuery = search.value;
         refreshGrid();
       });
     }
@@ -153,13 +164,12 @@ export const overview: View = {
       el.addEventListener('click', () =>
         update((s) => {
           s.activeTab = Number(el.dataset['tab']);
-          s.searchQuery = ''; // 點倉庫頁時清掉搜尋，讓分頁有意義
+          s.searchQuery = '';
         }),
       ),
     );
 
     wireCells();
-
     root.querySelector<HTMLElement>('[data-go="detail"]')?.addEventListener('click', () => navigate('detail'));
   },
 };

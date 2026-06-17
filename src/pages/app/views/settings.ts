@@ -37,7 +37,9 @@ export const settings: View = {
           <div style="display:flex;flex-direction:column;gap:16px;">
             <div class="field">
               <span class="label">聯盟</span>
-              <div class="select">Settlers · 當前賽季 <span class="muted">▾</span></div>
+              <select id="set-league" class="select">
+                ${store.leagues.map((l) => `<option value="${l}" ${l === store.league ? 'selected' : ''}>${l}</option>`).join('')}
+              </select>
             </div>
             <div class="field">
               <span class="label">同步的倉庫頁</span>
@@ -74,6 +76,12 @@ export const settings: View = {
           s.baseCurrency = el.dataset['cur'] as BaseCurrency;
         }),
       ),
+    );
+
+    root.querySelector<HTMLSelectElement>('#set-league')?.addEventListener('change', (e) =>
+      update((s) => {
+        s.league = (e.target as HTMLSelectElement).value;
+      }),
     );
 
     root.querySelector<HTMLElement>('[data-toggle]')?.addEventListener('click', () =>

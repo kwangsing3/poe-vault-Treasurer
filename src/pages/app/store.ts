@@ -32,18 +32,27 @@ export interface AppState {
   filters: Set<string>;
   /** 結算用的基準通貨 */
   baseCurrency: BaseCurrency;
+  /** 目前檢視的聯盟 */
+  league: string;
+  /** 可選聯盟清單（啟動時抓公用端點；連結帳號後改用 account 資訊，待實作） */
+  leagues: string[];
   /** 自動同步開關 */
   autoSync: boolean;
 }
 
+/** 聯盟清單的離線後備（抓取失敗時使用） */
+export const LEAGUES = ['標準模式', '專家模式'];
+
 const first = STASH_ITEMS[0];
 
 export const store: AppState = {
-  activeTab: 1,
+  activeTab: 0,
   selectedItem: first ? toSelected(first) : null,
   searchQuery: '',
   filters: new Set<string>(['稀有度::稀有']),
   baseCurrency: 'D',
+  league: '標準模式',
+  leagues: [...LEAGUES],
   autoSync: true,
 };
 
