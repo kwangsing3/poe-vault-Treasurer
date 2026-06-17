@@ -4,5 +4,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('poe', {
   getLeagues: () => ipcRenderer.invoke('poe:leagues'),
-  getStash: (tabIndex?: number) => ipcRenderer.invoke('poe:stash', tabIndex),
+  getStash: (tabIndex?: number, league?: string) =>
+    ipcRenderer.invoke('poe:stash', tabIndex, league),
+  getItemPrice: (league: string, name: string, type: string, rarity?: string) =>
+    ipcRenderer.invoke('poe:itemPrice', league, name, type, rarity),
+  getCurrencyPrice: (league: string, want: string, have?: string) =>
+    ipcRenderer.invoke('poe:currencyPrice', league, want, have),
+  getCurrencyCodes: () => ipcRenderer.invoke('poe:currencyCodes'),
 });

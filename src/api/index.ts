@@ -6,3 +6,6 @@ export * from "./endpoints";
 export * from "./types";
 export * from "./trade";
 export * from "./stash";
+export * from "./rateLimiter";
+export * from "./tradePrice";
+export * from "./staticData";

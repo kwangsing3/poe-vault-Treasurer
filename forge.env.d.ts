@@ -34,6 +34,10 @@ interface PoeStashItem {
   y: number;
   frameType: number;
   stackSize?: number;
+  ilvl?: number;
+  identified?: boolean;
+  implicitMods?: string[];
+  explicitMods?: string[];
   /** 其餘隨物品類型而異的欄位。 */
   [key: string]: unknown;
 }
@@ -50,8 +54,43 @@ interface PoeStashResponse {
 interface PoeBridge {
   /** 抓取公用聯盟清單（主進程代為呼叫，避開 renderer 的 CORS）；失敗回傳 null */
   getLeagues(): Promise<PoeLeague[] | null>;
-  /** 讀取指定倉庫分頁（預設 0）；目前回傳 mock，shape 同真實端點。失敗回傳 null */
-  getStash(tabIndex?: number): Promise<PoeStashResponse | null>;
+  /**
+   * 讀取指定倉庫分頁（預設 0）；可指定聯盟（mock 模式下只有標準模式有資料）。
+   * 目前回傳 mock，shape 同真實端點。失敗回傳 null。
+   */
+  getStash(tabIndex?: number, league?: string): Promise<PoeStashResponse | null>;
+  /**
+   * 物品估價（傳奇/裝備）：trade search 取線上前 N 筆、去離群取中位數。查無回 null。
+   * chaos/divine 為估價（混沌石 / 神聖石），listings 為取樣掛單（詳情頁列表用）。
+   */
+  getItemPrice(
+    league: string,
+    name: string,
+    type: string,
+    rarity?: string,
+  ): Promise<PoePriceQuote | null>;
+  /**
+   * 通貨估價：trade exchange 取兌換比、去離群取中位數。chaos = 1 want 值多少混沌石。查無回 null。
+   */
+  getCurrencyPrice(
+    league: string,
+    want: string,
+    have?: string,
+  ): Promise<PoePriceQuote | null>;
+  /** 通貨名稱 → trade code 對照（供 renderer 解析倉庫通貨名）。 */
+  getCurrencyCodes(): Promise<Record<string, string>>;
+}
+
+interface PoePriceListing {
+  amount: number;
+  currency: string;
+}
+interface PoePriceQuote {
+  chaos: number | null;
+  divine: number | null;
+  fetchedAt: number;
+  sampleSize: number;
+  listings: PoePriceListing[];
 }
 interface Window {
   poe: PoeBridge;

@@ -14,6 +14,9 @@ import type { GetStashItemsResponse } from "./types";
 /** 尚未串接真正帳號連結前一律回傳 mock。串好後改為 false。 */
 const USE_MOCK = true;
 
+/** mock 快照所屬的聯盟。mock 模式下只有這個聯盟有資料，其他聯盟回空（模擬多聯盟切換）。 */
+const MOCK_LEAGUE = "標準模式";
+
 /** 帳號相關選項。mock 模式用不到；真實模式才需要。 */
 export interface GetStashOptions {
   accountName?: string | undefined;
@@ -35,7 +38,13 @@ export async function getStashByTab(
   tabIndex: number,
   options: GetStashOptions = {},
 ): Promise<GetStashItemsResponse | null> {
-  if (USE_MOCK) return readMockTab(tabIndex);
+  if (USE_MOCK) {
+    // mock 只代表 MOCK_LEAGUE；指定其他聯盟時回傳空分頁，模擬「該聯盟尚無資料」。
+    if (options.league && options.league !== MOCK_LEAGUE) {
+      return { numTabs: 0, items: [] };
+    }
+    return readMockTab(tabIndex);
+  }
 
   // ── 真實端點（需 POESESSID + cf_clearance cookie，於主進程送出避開 CORS）──
   const res = await GET<GetStashItemsResponse>(STASH_ENDPOINTS.getStashItems, {

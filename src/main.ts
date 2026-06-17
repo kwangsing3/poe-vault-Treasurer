@@ -1,7 +1,13 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
-import { fetchLeagues, getStashByTab } from "./api";
+import {
+  fetchLeagues,
+  getStashByTab,
+  getItemPrice,
+  getCurrencyPrice,
+  currencyCodeByName,
+} from "./api";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -13,9 +19,27 @@ if (started) {
 ipcMain.handle("poe:leagues", () => fetchLeagues());
 
 // 倉庫物品：目前回傳 mock（尚未串帳號），shape 同真實端點。實作收斂在 src/api/stash.ts。
-ipcMain.handle("poe:stash", (_event, tabIndex?: number) =>
-  getStashByTab(tabIndex ?? 0),
+// 帶 league：mock 模式下只有標準模式有資料，其他聯盟回空（模擬多聯盟切換）。
+ipcMain.handle("poe:stash", (_event, tabIndex?: number, league?: string) =>
+  getStashByTab(tabIndex ?? 0, league !== undefined ? { league } : {}),
 );
+
+// 物品估價（傳奇/裝備）：經 trade search（兩段式 + 速率佇列），去離群取中位數。
+ipcMain.handle(
+  "poe:itemPrice",
+  (_event, league: string, name: string, type: string, rarity?: string) =>
+    getItemPrice(league, name, type, rarity),
+);
+
+// 通貨估價：走 exchange 端點（獨立佇列），回傳 1 want 兌多少 have（預設混沌石）。
+ipcMain.handle(
+  "poe:currencyPrice",
+  (_event, league: string, want: string, have?: string) =>
+    getCurrencyPrice(league, want, have ?? "chaos"),
+);
+
+// 通貨名稱 → trade code 對照（renderer 解析倉庫通貨名以呼叫 currencyPrice）。
+ipcMain.handle("poe:currencyCodes", () => currencyCodeByName());
 
 const createWindow = () => {
   // Create the browser window.
