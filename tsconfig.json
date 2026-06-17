@@ -5,8 +5,10 @@
     "module": "ESNext", /* 程式由 Vite/esbuild 打包，型別檢查以 ESM 為準 */
     "moduleResolution": "Bundler", /* Vite 打包專案：以 bundler 解析，允許 ESM import/export 語法 */
     "lib": [
-      "ES2023"
-    ], /* main 進程僅需 ES 標準庫；renderer 的 DOM 型別由 vite/client 另行提供 */
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ], /* renderer 跑在瀏覽器需要 DOM；main(Node) 的 fetch 等全域由 @types/node 提供 */
     /* 輸出設定 */
     "outDir": "./build",
     "rootDir": "./src",

@@ -1,33 +1,12 @@
 /**
- * This file will automatically be loaded by vite and run in the "renderer" context.
- * To learn more about the differences between the "main" and the "renderer" context in
- * Electron, visit:
+ * Renderer 進入點。由 Vite 載入、執行於 renderer（瀏覽器）情境。
  *
- * https://electronjs.org/docs/tutorial/process-model
- *
- * By default, Node.js integration in this file is disabled. When enabling Node.js integration
- * in a renderer process, please be aware of potential security implications. You can read
- * more about security risks here:
- *
- * https://electronjs.org/docs/tutorial/security
- *
- * To enable Node.js integration in this file, open up `main.ts` and enable the `nodeIntegration`
- * flag:
- *
- * ```
- *  // Create the browser window.
- *  mainWindow = new BrowserWindow({
- *    width: 800,
- *    height: 600,
- *    webPreferences: {
- *      nodeIntegration: true
- *    }
- *  });
- * ```
+ * 整個 UI 是單一視窗的 SPA：app shell（頂部導覽）+ 內容區，透過 hash 路由換頁。
+ * 共用狀態放在 store，換頁時不重載頁面，因此使用者資料不會中斷。
  */
 
-import '../index.css';
+import './app/theme.css';
+import { start } from './app/router';
 
-console.log(
-  '👋 This message is being logged by "renderer.ts", included via Vite',
-);
+const root = document.getElementById('app');
+if (root) start(root);
