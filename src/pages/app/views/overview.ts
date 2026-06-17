@@ -4,6 +4,7 @@ import {
   STASH_TABS,
   formatChaos,
   formatStashTotal,
+  isGridTab,
   searchItems,
   tabItems,
   tabSize,
@@ -45,9 +46,18 @@ function gridHTML(): string {
   }
 
   const items = tabItems(tab);
+
+  // 特殊分頁（通貨/碎片/卡…）座標非格線，改用 flow 排列。
+  if (!isGridTab(tab)) {
+    const flow = items.map((it) => itemHTML(it, false)).join('');
+    return `<div class="real-grid search" style="--cell:${NORMAL_CELL}px;--n:12;">
+      <div class="rg-flow">${flow || '<span class="rg-empty">此頁沒有物品</span>'}</div>
+    </div>`;
+  }
+
   const bg = Array.from({ length: n * n }, () => '<div class="gcell"></div>').join('');
   const gitems = items.map((it) => itemHTML(it, true)).join('');
-  const empty = items.length === 0 ? '<div class="rg-hint">此頁尚未抓取資料（目前僅同步 tab 0）</div>' : '';
+  const empty = items.length === 0 ? '<div class="rg-hint">此頁沒有物品</div>' : '';
   return `<div class="real-grid" style="--cell:${cell}px;--n:${n};">
     <div class="rg-bg">${bg}</div>
     <div class="rg-items">${gitems}</div>

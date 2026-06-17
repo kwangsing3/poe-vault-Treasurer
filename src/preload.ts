@@ -4,4 +4,5 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('poe', {
   getLeagues: () => ipcRenderer.invoke('poe:leagues'),
+  getStash: (tabIndex?: number) => ipcRenderer.invoke('poe:stash', tabIndex),
 });

@@ -5,7 +5,7 @@ import {
   RARITY_COLOR,
   TOTAL_DIV,
 } from '../data';
-import { STASH_ITEMS, formatStashTotal } from '../stash';
+import { STASH_ITEMS, STASH_TABS, formatStashTotal } from '../stash';
 import { store } from '../store';
 import type { View } from '../router';
 
@@ -51,7 +51,7 @@ export const report: View = {
             <div class="kpi">
               <span class="kicker">已識別物品</span>
               <span class="big">${STASH_ITEMS.length}</span>
-              <span class="muted" style="font:500 11px/1.4 var(--sans);">跨 8 個倉庫頁</span>
+              <span class="muted" style="font:500 11px/1.4 var(--sans);">跨 ${STASH_TABS.length} 個倉庫頁</span>
             </div>
             <div class="kpi">
               <span class="kicker">可擺攤</span>

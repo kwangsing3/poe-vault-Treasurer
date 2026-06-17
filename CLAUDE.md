@@ -57,9 +57,12 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 | 通貨資料 | `https://pathofexile.tw/api/trade/data/static` | `mock/trade-data/static.json` |
 | 裝備參考 | `https://pathofexile.tw/api/trade/data/items` | `mock/trade-data/items.json` |
 | 詞綴參考 | `https://pathofexile.tw/api/trade/data/stats` | `mock/trade-data/stats.json` |
+| 聯盟清單 | `https://pathofexile.tw/api/trade/data/leagues` | —（即時抓取，不留 mock） |
 
-- `mock/trade-data/` 是上述端點的快照，供開發/測試離線使用（內容為大型 JSON，
+- `mock/trade-data/` 是上述靜態端點的快照，供開發/測試離線使用（內容為大型 JSON，
   stats 約 1.7MB）。需要更新時重新抓取對應端點即可。
+- **聯盟清單是即時取得**（公用、無需登入）：`src/api/trade.ts` 的 `fetchLeagues()` 在主進程直接打
+  上表端點，回傳 `{ id, realm, text }[]`，供 renderer 右上角聯盟切換。不做 mock。
 - 透過 [`http.mod.ts`](./src/utility/http.mod.ts) 取用線上資料時，記得套用速率限制。
 
 ## 常用指令

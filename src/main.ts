@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
+import { fetchLeagues, getStashByTab } from "./api";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -8,18 +9,13 @@ if (started) {
 }
 
 // 公用聯盟清單：在主進程抓（Node fetch 無 CORS 限制），失敗回傳 null 讓 renderer 用後備清單。
-ipcMain.handle("poe:leagues", async () => {
-  try {
-    const res = await fetch("https://pathofexile.tw/api/trade/data/leagues", {
-      headers: { "user-agent": "poe-vault-treasurer" },
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { result?: unknown };
-    return Array.isArray(data.result) ? data.result : null;
-  } catch {
-    return null;
-  }
-});
+// 實際請求收斂在 src/api（走 http.mod.ts，已套速率限制）。
+ipcMain.handle("poe:leagues", () => fetchLeagues());
+
+// 倉庫物品：目前回傳 mock（尚未串帳號），shape 同真實端點。實作收斂在 src/api/stash.ts。
+ipcMain.handle("poe:stash", (_event, tabIndex?: number) =>
+  getStashByTab(tabIndex ?? 0),
+);
 
 const createWindow = () => {
   // Create the browser window.

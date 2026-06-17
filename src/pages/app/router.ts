@@ -1,4 +1,4 @@
-import { formatStashTotal } from './stash';
+import { formatStashTotal, loadStashItems } from './stash';
 import { store, subscribe, update } from './store';
 import { overview } from './views/overview';
 import { detail } from './views/detail';
@@ -101,4 +101,6 @@ export function start(root: HTMLElement): void {
   if (!location.hash) location.hash = '#/overview';
   render();
   void loadLeagues();
+  // 載入全部分頁的倉庫物品（透過 API；目前回傳 mock），完成後重繪以填入各頁內容與總資產。
+  void loadStashItems().then(render);
 }
