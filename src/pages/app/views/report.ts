@@ -1,30 +1,48 @@
+import { buildHistoryBars, CURRENCY_META, RARITY_COLOR, TOTAL_DIV } from '../data';
 import {
-  buildHistoryBars,
-  CURRENCY_META,
-  CURRENCY_ROWS,
-  RARITY_COLOR,
-  TOTAL_DIV,
-} from '../data';
-import { STASH_ITEMS, STASH_TABS, formatStashTotal } from '../stash';
+  STASH_ITEMS,
+  STASH_TABS,
+  formatChaos,
+  formatStashTotal,
+  itemTotalChaos,
+} from '../stash';
 import { store } from '../store';
 import type { View } from '../router';
 
 const bars = buildHistoryBars();
+
+/** 聚合當前聯盟的通貨類物品：依名稱合併、加總堆疊與估值，依總值排序。 */
+function currencyBreakdown(): { name: string; count: number; chaos: number }[] {
+  const acc = new Map<string, { name: string; count: number; chaos: number }>();
+  for (const it of STASH_ITEMS) {
+    if (it.rarity !== 'currency') continue;
+    const row = acc.get(it.name) ?? { name: it.name, count: 0, chaos: 0 };
+    row.count += it.stack ?? 1;
+    row.chaos += itemTotalChaos(it);
+    acc.set(it.name, row);
+  }
+  return [...acc.values()].sort((a, b) => b.chaos - a.chaos);
+}
 
 export const report: View = {
   render() {
     const meta = CURRENCY_META[store.baseCurrency];
     const total = formatStashTotal(store.baseCurrency).replace('≈ ', '');
 
-    const curRows = CURRENCY_ROWS.map(
-      (c) => `
+    const breakdown = currencyBreakdown();
+    const curTotalChaos = breakdown.reduce((s, c) => s + c.chaos, 0);
+    const curRows = breakdown
+      .slice(0, 12)
+      .map(
+        (c) => `
       <div class="cur-row">
-        <span class="dot" style="background:${RARITY_COLOR[c.rarityKey]};"></span>
+        <span class="dot" style="background:${RARITY_COLOR.currency};"></span>
         <span style="flex:1;font:500 13px/1 var(--sans);">${c.name}</span>
-        <span class="muted" style="font:500 12px/1 var(--sans);min-width:54px;text-align:right;">×${c.count}</span>
-        <span style="font:600 14px/1 var(--sans);min-width:74px;text-align:right;">${c.value}</span>
+        <span class="muted" style="font:500 12px/1 var(--sans);min-width:54px;text-align:right;">×${c.count.toLocaleString('en-US')}</span>
+        <span style="font:600 14px/1 var(--sans);min-width:74px;text-align:right;">${formatChaos(c.chaos)}</span>
       </div>`,
-    ).join('');
+      )
+      .join('') || '<div class="cur-row"><span class="muted" style="font:500 12px/1 var(--sans);">此聯盟尚無通貨資料</span></div>';
 
     const chartBars = bars
       .map((b) => `<div class="bar ${b.peak ? 'peak' : ''}" style="height:${b.h}%;"></div>`)
@@ -65,7 +83,7 @@ export const report: View = {
               ${curRows}
               <div class="cur-total">
                 <span style="flex:1;font:600 13px/1 var(--sans);">合計（折 ${meta.unit}）</span>
-                <span style="font:600 16px/1 var(--sans);">${(154.9 * meta.perDiv).toLocaleString('en-US', { maximumFractionDigits: meta.perDiv === 1 ? 1 : 0 })} ${meta.unit}</span>
+                <span style="font:600 16px/1 var(--sans);">${((curTotalChaos / CURRENCY_META.C.perDiv) * meta.perDiv).toLocaleString('en-US', { maximumFractionDigits: meta.perDiv === 1 ? 1 : 0 })} ${meta.unit}</span>
               </div>
             </div>
             <div class="chart">

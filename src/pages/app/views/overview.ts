@@ -10,7 +10,8 @@ import {
   tabSize,
   type StashItem,
 } from '../stash';
-import { store, toSelected, update } from '../store';
+import { store, toSelected } from '../store';
+import { priceLinesHTML, priceStateFor, keyOf, setPriceResolveHook } from '../prices';
 import { navigate } from '../router';
 import type { View } from '../router';
 
@@ -76,7 +77,8 @@ function footerHTML(): string {
   return `${label} · ${items.length} 件 · 全庫 ${STASH_ITEMS.length} 件 · 估值合計 ${formatStashTotal(store.baseCurrency)}`;
 }
 
-function plaque(): string {
+/** 銘牌內層（不含 .plaque 外殼），供就地刷新而不重建外層元素。 */
+function plaqueInner(): string {
   const sel = store.selectedItem;
   const color = sel ? RARITY_COLOR[sel.rarity] : '#cdc9c0';
   const rarity = sel ? RARITY_LABEL[sel.rarity] : '—';
@@ -90,8 +92,15 @@ function plaque(): string {
         ? `${formatChaos(sel.value)} / 個 · ×${sel.stack.toLocaleString('en-US')}`
         : formatChaos(sel.value)
       : '—';
+  // 市場價只對傳奇物品顯示（其餘無 trade 估價來源）。
+  const marketLine =
+    sel?.rarity === 'unique'
+      ? `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+        <span class="ink-2" style="font:500 12px/1 var(--sans);">市場價</span>
+        <span style="font:600 14px/1 var(--sans);text-align:right;">${priceLinesHTML(priceStateFor(sel.name, sel.base))}</span>
+      </div>`
+      : '';
   return `
-    <div class="plaque">
       <span class="kicker">選中物品 · 銘牌</span>
       ${art}
       <div style="display:flex;flex-direction:column;gap:5px;">
@@ -103,8 +112,12 @@ function plaque(): string {
         <span class="ink-2" style="font:500 12px/1 var(--sans);">估值（mock）</span>
         <span style="font:600 18px/1 var(--sans);">${priceLine}</span>
       </div>
-      <button class="btn btn-dark" data-go="detail" style="margin-top:auto;">查價 / 加入擺攤 →</button>
-    </div>`;
+      ${marketLine}
+      <button class="btn btn-dark" data-go="detail" style="margin-top:auto;">查價 / 加入擺攤 →</button>`;
+}
+
+function plaque(): string {
+  return `<div class="plaque" id="ov-plaque">${plaqueInner()}</div>`;
 }
 
 export const overview: View = {
@@ -145,12 +158,27 @@ export const overview: View = {
   mount(root) {
     const gridEl = root.querySelector<HTMLElement>('#ov-grid');
     const footerEl = root.querySelector<HTMLElement>('#ov-footer');
+    const plaqueEl = root.querySelector<HTMLElement>('#ov-plaque');
+
+    // 就地刷新銘牌（詳情按鈕在銘牌內，重繪後需重新綁定）。
+    const refreshPlaque = () => {
+      if (!plaqueEl) return;
+      plaqueEl.innerHTML = plaqueInner();
+      plaqueEl
+        .querySelector<HTMLElement>('[data-go="detail"]')
+        ?.addEventListener('click', () => navigate('detail'));
+    };
 
     const wireCells = () => {
       gridEl?.querySelectorAll<HTMLElement>('[data-id]').forEach((el) =>
         el.addEventListener('click', () => {
           const it = STASH_ITEMS.find((x) => x.id === el.dataset['id']);
-          if (it) update((s) => (s.selectedItem = toSelected(it)));
+          if (!it) return;
+          // 就地更新選取狀態：只刷新銘牌與高亮，不走全域 update()（保留捲動位置）。
+          store.selectedItem = toSelected(it);
+          gridEl.querySelectorAll('[data-id].sel').forEach((s) => s.classList.remove('sel'));
+          el.classList.add('sel');
+          refreshPlaque();
         }),
       );
     };
@@ -170,16 +198,26 @@ export const overview: View = {
       });
     }
 
-    root.querySelectorAll<HTMLElement>('[data-tab]').forEach((el) =>
-      el.addEventListener('click', () =>
-        update((s) => {
-          s.activeTab = Number(el.dataset['tab']);
-          s.searchQuery = '';
-        }),
-      ),
+    // 切頁籤就地更新（不走全域 update()，避免整個 app 重繪而重置 .content / .tab-rail 的捲動位置）。
+    const tabEls = root.querySelectorAll<HTMLElement>('[data-tab]');
+    tabEls.forEach((el) =>
+      el.addEventListener('click', () => {
+        const tab = Number(el.dataset['tab']);
+        store.activeTab = tab;
+        store.searchQuery = '';
+        if (search) search.value = '';
+        tabEls.forEach((t) => t.classList.toggle('active', Number(t.dataset['tab']) === tab));
+        refreshGrid();
+      }),
     );
 
     wireCells();
-    root.querySelector<HTMLElement>('[data-go="detail"]')?.addEventListener('click', () => navigate('detail'));
+    refreshPlaque();
+
+    // 背景估價回來時，若更新的正是當前選中的傳奇物品，就地刷新銘牌的市場價。
+    setPriceResolveHook((key) => {
+      const sel = store.selectedItem;
+      if (sel && key === keyOf(sel.name, sel.base)) refreshPlaque();
+    });
   },
 };

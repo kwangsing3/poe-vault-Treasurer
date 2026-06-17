@@ -1,6 +1,6 @@
 // 倉庫資料：分頁中繼資料（STASH_TABS）為固定值；物品（STASH_ITEMS）於啟動時透過
 // preload 暴露的 window.poe.getStash(tabIndex) 逐頁載入（目前主進程回傳 mock，shape 同真實端點）。
-// 由 router 在啟動時呼叫 loadStashItems() 填入後重繪；估值(value)仍為 mock。
+// 由 router 在啟動時呼叫 loadLeagueVault() 填入後重繪；估值(value)仍為 mock。
 import { CURRENCY_META, type BaseCurrency, type Rarity } from './data';
 
 export const QUAD_SIZE = 24;
@@ -25,6 +25,8 @@ export interface StashItem {
   stack?: number; // 堆疊數（真實）
   icon: string;
   x: number; y: number; w: number; h: number;
+  ilvl?: number; // 物品等級（真實）
+  mods?: string[]; // 詞綴（implicit + explicit，真實）
 }
 
 export const STASH_TABS: StashTab[] = [
@@ -66,7 +68,7 @@ export const STASH_TABS: StashTab[] = [
   {"i":35,"n":"~b/o 1 divine (Remove-only)","type":"QuadStash","r":124,"g":84,"b":54,"quad":true},
 ];
 
-/** 物品清單：啟動時由 loadStashItems() 透過 API 載入（就地填入，所有引用共享同一陣列）。 */
+/** 物品清單：永遠指向「當前聯盟」的物品，由 loadLeagueVault() 填入（就地置換，所有引用共享同一陣列）。 */
 export const STASH_ITEMS: StashItem[] = [];
 
 const CHAOS_PER_DIV = CURRENCY_META.C.perDiv;
@@ -156,20 +158,49 @@ function rawToStashItem(raw: PoeStashItem, tab: number, idx: number): StashItem 
     x: raw.x, y: raw.y, w: raw.w, h: raw.h,
   };
   if (raw.stackSize !== undefined) item.stack = raw.stackSize;
+  if (raw.ilvl !== undefined && raw.ilvl > 0) item.ilvl = raw.ilvl;
+  const mods = [...(raw.implicitMods ?? []), ...(raw.explicitMods ?? [])];
+  if (mods.length > 0) item.mods = mods;
   return item;
 }
 
-/**
- * 逐頁透過 window.poe.getStash(tabIndex) 載入所有分頁的物品，填入 STASH_ITEMS。
- * 可重複呼叫（會先清空）。無 bridge（例如在純瀏覽器情境）時靜默略過。
- */
-export async function loadStashItems(): Promise<void> {
+// ── 聯盟倉庫快取（vault）──────────────────────────────────────────────────
+// 以聯盟為 key 快取各聯盟的倉庫物品。切換聯盟時換倉庫內容；已載入過的聯盟直接用快取。
+// STASH_ITEMS 永遠指向「當前聯盟」的物品（live binding，所有引用共享同一陣列）。
+
+const VAULT = new Map<string, StashItem[]>();
+
+/** 透過 API 逐頁載入指定聯盟的所有物品。 */
+async function fetchLeagueItems(league: string): Promise<StashItem[]> {
   const bridge = window.poe;
-  if (!bridge?.getStash) return;
-  STASH_ITEMS.length = 0;
+  if (!bridge?.getStash) return [];
+  const items: StashItem[] = [];
   for (const t of STASH_TABS) {
-    const res = await bridge.getStash(t.i);
+    const res = await bridge.getStash(t.i, league);
     if (!res || !Array.isArray(res.items)) continue;
-    res.items.forEach((raw, idx) => STASH_ITEMS.push(rawToStashItem(raw, t.i, idx)));
+    res.items.forEach((raw, idx) => items.push(rawToStashItem(raw, t.i, idx)));
   }
+  return items;
+}
+
+/** 把指定聯盟的物品換進 STASH_ITEMS（沿用同一陣列，維持所有 live binding）。 */
+function setActiveItems(items: StashItem[]): void {
+  STASH_ITEMS.length = 0;
+  STASH_ITEMS.push(...items);
+}
+
+/**
+ * 載入並切換到指定聯盟的倉庫；已載入過則直接用快取。
+ * @param force 為 true 時忽略快取重新抓取（供「立即同步」使用）。
+ */
+export async function loadLeagueVault(league: string, force = false): Promise<void> {
+  if (force || !VAULT.has(league)) {
+    VAULT.set(league, await fetchLeagueItems(league));
+  }
+  setActiveItems(VAULT.get(league)!);
+}
+
+/** 該聯盟是否已載入過（用於 UI 顯示「尚未同步」）。 */
+export function isLeagueLoaded(league: string): boolean {
+  return VAULT.has(league);
 }

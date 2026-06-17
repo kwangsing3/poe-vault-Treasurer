@@ -15,10 +15,21 @@ export interface SelectedItem {
   value?: number | undefined; // 混沌石
   stack?: number | undefined;
   icon?: string | undefined;
+  ilvl?: number | undefined;
+  mods?: string[] | undefined;
 }
 
 export function toSelected(it: StashItem): SelectedItem {
-  return { name: it.name, rarity: it.rarity, base: it.base, value: it.value, stack: it.stack, icon: it.icon };
+  return {
+    name: it.name,
+    rarity: it.rarity,
+    base: it.base,
+    value: it.value,
+    stack: it.stack,
+    icon: it.icon,
+    ilvl: it.ilvl,
+    mods: it.mods,
+  };
 }
 
 export interface AppState {
@@ -38,6 +49,8 @@ export interface AppState {
   leagues: string[];
   /** 自動同步開關 */
   autoSync: boolean;
+  /** 上次成功同步倉庫的時間戳（ms）；尚未同步為 null */
+  lastSync: number | null;
 }
 
 /** 聯盟清單的離線後備（抓取失敗時使用） */
@@ -54,6 +67,7 @@ export const store: AppState = {
   league: '標準模式',
   leagues: [...LEAGUES],
   autoSync: true,
+  lastSync: null,
 };
 
 /** 訂閱者：狀態變更後要重繪的回呼（由 router 註冊） */

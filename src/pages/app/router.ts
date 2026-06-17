@@ -1,4 +1,5 @@
-import { formatStashTotal, loadStashItems } from './stash';
+import { formatStashTotal, loadLeagueVault } from './stash';
+import { loadUniquePrices, setPriceResolveHook } from './prices';
 import { store, subscribe, update } from './store';
 import { overview } from './views/overview';
 import { detail } from './views/detail';
@@ -61,6 +62,8 @@ function topbar(route: Route): string {
 let app: HTMLElement;
 
 function render(): void {
+  // 清掉上一個 view 設定的估價更新 hook（避免指向已卸載的 DOM）；需要的 view 會在 mount 重設。
+  setPriceResolveHook(null);
   const route = currentRoute();
   app.innerHTML = `${topbar(route)}<div class="content" id="content"></div>`;
 
@@ -69,7 +72,7 @@ function render(): void {
   );
 
   app.querySelector<HTMLSelectElement>('#league-sel')?.addEventListener('change', (e) =>
-    update((s) => (s.league = (e.target as HTMLSelectElement).value)),
+    switchLeague((e.target as HTMLSelectElement).value),
   );
 
   const content = app.querySelector<HTMLElement>('#content')!;
@@ -87,10 +90,32 @@ async function loadLeagues(): Promise<void> {
   const list = await window.poe?.getLeagues();
   if (!list || list.length === 0) return;
   const names = list.map((l) => l.text);
+  const prev = store.league;
   update((s) => {
     s.leagues = names;
     if (!names.includes(s.league)) s.league = names[0]!;
   });
+  // 若後備聯盟不在即時清單裡而被換掉，載入新預設聯盟的倉庫。
+  if (store.league !== prev) syncLeague();
+}
+
+/** 載入當前聯盟的倉庫（force 時忽略快取重抓），記錄同步時間、重繪，並在背景拉取傳奇估價。 */
+export function syncLeague(force = false): void {
+  void loadLeagueVault(store.league, force).then(() => {
+    store.lastSync = Date.now();
+    render();
+    // 背景估價：不阻塞 UI，價格陸續寫入快取（無 session 時一律「未知」）。
+    void loadUniquePrices(store.league);
+  });
+}
+
+/** 切換聯盟：更新狀態並載入該聯盟倉庫（已載入過則用快取），完成後重繪。 */
+export function switchLeague(league: string): void {
+  update((s) => {
+    s.league = league;
+    s.searchQuery = '';
+  });
+  syncLeague();
 }
 
 export function start(root: HTMLElement): void {
@@ -101,6 +126,6 @@ export function start(root: HTMLElement): void {
   if (!location.hash) location.hash = '#/overview';
   render();
   void loadLeagues();
-  // 載入全部分頁的倉庫物品（透過 API；目前回傳 mock），完成後重繪以填入各頁內容與總資產。
-  void loadStashItems().then(render);
+  // 載入當前聯盟的倉庫物品（透過 API；目前回傳 mock），完成後重繪以填入各頁內容與總資產。
+  syncLeague();
 }

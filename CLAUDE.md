@@ -30,13 +30,17 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 
 - `theme.css` — 設計系統（色票 / 字體 / 卡片 / 各頁樣式）
 - `data.ts` — 線框雜項 mock（稀有度色票 / 詞綴 / 比價列 等）
-- `stash.ts` — **自動生成**的倉庫資料，來源為 `mock/stash/get-stash-items-tab0.json`
-  （真實 `get-stash-items` 回應；名稱/圖示/座標/堆疊皆真實，僅 `value` 為 mock）。
-  提供 `STASH_TABS`(36 頁)、`STASH_ITEMS`(tab 0 共 332 件，含 `x/y/w/h/icon/frame`)、
-  `tabItems`、`searchItems`、`tabSize`、`formatStashTotal` 等。重生請用 `.gen-realstash.mjs`
-  （一次性，不留 repo）。**在做真正帳號連結前，一律以這份 mock 為資料源。**
-- `store.ts` — 共用狀態（`subscribe` / `update`）
-- `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈；頂部「總資產」走 `formatStashTotal`
+- `stash.ts` — 倉庫資料與**以聯盟為 key 的 vault**。`STASH_TABS`(36 頁固定中繼) +
+  `STASH_ITEMS`（**當前聯盟**的物品，live binding）。`loadLeagueVault(league)` 啟動 / 切聯盟時
+  透過 `window.poe.getStash(tabIndex, league)` 逐頁載入並快取；`isGridTab()` 區分 2D 網格分頁
+  （Quad/Normal/Premium）與特殊分頁（通貨/碎片…改 flow 排列）。資料源為 `mock/stash/get-stash-items-tab{0..35}.json`
+  （真實回應；僅 `value` 為 mock）。**在做真正帳號連結前一律以這份 mock 為資料源。**
+- `prices.ts` — 傳奇估價（背景）：經 `window.poe.getItemPrice` 走 trade search，**去離群取中位數**，
+  同一次請求同時得混沌石 + 神聖石價。單一 worker 的**查價佇列**（支援插隊到最前）；價格依聯盟
+  存進 `localStorage`、超過 1 小時視為過期重查。
+- `store.ts` — 共用狀態（`subscribe` / `update`，含 `lastSync`）
+- `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈；`switchLeague` / `syncLeague` 換聯盟並重載 vault +
+  背景估價；頂部「總資產」走 `formatStashTotal`
 - `views/` — `overview` / `detail` / `search` / `report` / `settings` 五頁，各匯出 `View`
   （`render(): string` + 選用 `mount(root)`）
 
@@ -44,7 +48,7 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 - **倉庫頁尺寸**：依分頁類型，`QuadStash` 為 24×24，其餘 12×12（見 `tabSize()`）。
   總覽以真實 `x/y/w/h` 在深色格線上定位物品、顯示堆疊數，外觀比照遊戲內倉庫。
 - **物品圖示**：stash 回應每件都帶真實 `icon`（CDN `webtw.poecdn.com`，離線會載不出）。
-- 目前只抓了 tab 0 的物品，其他分頁顯示空格 + 提示。
+- **就地更新**：切頁籤 / 選物品 / 估價回填只刷新對應局部（grid / 銘牌），不走全域重繪，避免重置捲動。
 - 全站「總資產 / 估值合計」一律以 `stash.ts` 的實際資料計算，跨頁一致。
 - 線框原檔每頁有 A（高密度）/ B（低密度）兩版，目前只做了 A。
 
@@ -64,6 +68,18 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 - **聯盟清單是即時取得**（公用、無需登入）：`src/api/trade.ts` 的 `fetchLeagues()` 在主進程直接打
   上表端點，回傳 `{ id, realm, text }[]`，供 renderer 右上角聯盟切換。不做 mock。
 - 透過 [`http.mod.ts`](./src/utility/http.mod.ts) 取用線上資料時，記得套用速率限制。
+
+### 交易估價（trade search / exchange）
+
+所有與官方 API 互動的入口都收斂在 `src/api/`（barrel 為 `index.ts`），於 **main 進程**執行、renderer 走 preload IPC：
+
+- `tradePrice.ts` — `getItemPrice`（物品走 `/api/trade/search` 兩段式：search → fetch）與
+  `getCurrencyPrice`（通貨走 `/api/trade/exchange`，**暫未從 UI 使用**）。實測這些端點**公開、免登入**即可查。
+  「有效價格」= 線上 + 即刻購買（`sale_type=priced`）+ 限定稀有度 → 同批掛單裡混沌石 / 神聖石**各別去離群取中位數**。
+- `rateLimiter.ts` — per-policy 的請求佇列：多窗口滑動、依回應 `x-rate-limit-*` 標頭自我校正、429 退避。
+  search 與 exchange 各一個實例（policy 不同）。**串接官方 API 一律經此佇列**，勿直接打。
+- `staticData.ts` — 由 `mock/trade-data/static.json` 建「通貨名稱 → trade code」對照（通貨估價用，之後接）。
+- `client.ts` — 共用 `User-Agent`（`OAuth poecoco/<version> (contact: …)`）與全域速率限制設定。
 
 ## 常用指令
 
