@@ -101,7 +101,16 @@ function footerHTML(): string {
   }
   const t = STASH_TABS.find((x) => x.i === store.activeTab);
   const items = tabItems(store.activeTab);
-  const label = t ? `${t.n} · ${t.quad ? '巨型 24×24' : '一般 12×12'}` : `分頁 ${store.activeTab}`;
+  let label: string;
+  if (t) {
+    const tl = typeLabel(t.type);
+    // 分頁名與類型相同時不重複顯示；網格類分頁才標尺寸（特殊分頁無格線概念）。
+    const name = t.n === tl ? tl : `${t.n} · ${tl}`;
+    const size = isGridTab(t.i) ? ` · ${tabSize(t.i)}×${tabSize(t.i)}` : '';
+    label = `${name}${size}`;
+  } else {
+    label = `分頁 ${store.activeTab}`;
+  }
   return `${label} · ${items.length} 件 · 全庫 ${STASH_ITEMS.length} 件 · 估值合計 ${formatStashTotal(store.baseCurrency)}`;
 }
 
