@@ -6,7 +6,7 @@
 
 ![倉庫總覽](docs/screenshot.png)
 
-> ⚠️ **目前狀態：早期開發中。** 專案骨架、建置/發佈流程、底層 HTTP 工具已就緒；UI（博物館風格 SPA，5 頁）已實作並以真實 stash 結構的 mock 資料驅動；PoE 帳號 OAuth 串接與物品估價仍在開發。下方功能清單以「已完成 / 規劃中」標示。
+> ⚠️ **目前狀態：早期開發中。** 博物館風格 SPA（5 頁）已實作；倉庫資料以真實 `get-stash-items` 結構的 mock 驅動（36 分頁、約 3600 件），而**物品估價走真實官方 trade API**（含速率限制）。尚未串接帳號登入（mock 資料源），下方功能清單以「已完成 / 規劃中」標示。
 
 ## 功能
 
@@ -15,17 +15,25 @@
 - 博物館風格 SPA（hash 路由、共用狀態跨頁不中斷）：倉庫總覽 / 物品詳情 / 搜尋 / 報表 / 設定
 - 倉庫總覽比照遊戲內倉庫：依物品真實座標定位、真實圖示與堆疊數、一般頁 12×12 與巨型頁 24×24、真實分頁名與顏色
 - 右上角聯盟切換（啟動時抓官方公用 leagues，經主進程避開 CORS）與總資產即時換算
-- 型別安全、基於原生 `fetch` 的 HTTP 工具（`src/utility/http.mod.ts`）：
-  GET/POST/PUT/PATCH/DELETE、統一 `Result` 回傳格式、query 序列化、
-  JSON 解析、逾時控制，以及**每分鐘速率限制**（為 GGG API 的 rate limit 預備）
+- **物品估價（官方 trade API）**：兩段式 search→fetch、去離群取中位數；傳奇物品**背景查價佇列** + 依聯盟存 localStorage（開啟即有價、1 小時過期重查）
+- **API 服務層（`src/api/`）**：集中所有 GGG 互動，search / fetch / exchange 各自獨立的速率限制佇列（解析 `X-Rate-Limit-*`、處理 429）
+- **淨資產報表**：只計已估價資產，神聖石 / 混沌石雙幣別、分類小計與估價覆蓋率、每小時快照走勢（24h / 7d / 30d）
+- 型別安全、基於原生 `fetch` 的 HTTP 工具（`src/utility/http.mod.ts`，內建速率限制）
 - 一鍵建置成 Windows 安裝檔 + 可攜式 zip，並有 tag 觸發的自動 Release 流程
 
 **規劃中（roadmap）**
-- 透過 GGG 官方 PoE API（OAuth）登入並讀取真實 stash tabs（取代目前的 mock）
-- 物品估價（poe.ninja / 官方 trade）
-- 總財富儀表板：即時數值 + 歷史曲線
+- 透過 GGG 官方 PoE API（OAuth / POESESSID）登入並讀取真實 stash tabs（關閉 `USE_MOCK` 即接上）
+- 通貨估價（exchange 端點，目前只估傳奇物品）
 - 連結帳號後依 account 取得聯盟清單與多帳號切換
 - 價格變動提醒
+
+## 畫面
+
+物品詳情（真實詞綴 + 官方 trade 掛單）與淨資產報表：
+
+![物品詳情](docs/screenshot-detail.png)
+
+![總資產報表](docs/screenshot-report.png)
 
 ## 技術棧
 
@@ -64,14 +72,23 @@ git tag v0.1.0 && git push origin v0.1.0
 
 ```
 ├── src/
-│   ├── main.ts            # Electron 主進程（建立 BrowserWindow、載入 renderer）
-│   ├── preload.ts         # preload script
-│   ├── pages/             # renderer（Vite root）
-│   │   ├── index.html     #   renderer 進入點
-│   │   └── renderer.ts    #   renderer 程式
-│   ├── index.css          # 樣式
-│   └── utility/
-│       └── http.mod.ts    # 基於 fetch 的 HTTP 工具（含速率限制）
+│   ├── main.ts            # Electron 主進程（BrowserWindow + IPC handlers）
+│   ├── preload.ts         # contextBridge：把 window.poe 暴露給 renderer
+│   ├── api/               # GGG API 服務層（主進程用）
+│   │   ├── trade.ts       #   聯盟 / 物品估價 / 通貨兌換
+│   │   ├── tradePrice.ts  #   去離群取中位數
+│   │   ├── rateLimiter.ts #   search/fetch/exchange 速率限制佇列
+│   │   ├── stash.ts       #   倉庫物品（目前回 mock）
+│   │   ├── staticData.ts  #   通貨名稱→trade code
+│   │   └── …              #   client / endpoints / types / index
+│   ├── pages/             # renderer（Vite root，瀏覽器情境）
+│   │   ├── index.html
+│   │   ├── renderer.ts
+│   │   └── app/           #   SPA：router / store / stash / prices / networth / views
+│   ├── index.css
+│   └── utility/http.mod.ts   # 基於 fetch 的 HTTP 工具（含速率限制）
+├── mock/                  # 離線 mock（trade-data 靜態資料 + stash 36 頁）
+├── docs/                  # README 截圖
 ├── forge.config.ts        # Electron Forge 設定（makers / plugins / fuses）
 ├── vite.{main,preload,renderer}.config.ts
 ├── .github/workflows/release.yml   # tag 觸發的建置 + Release
