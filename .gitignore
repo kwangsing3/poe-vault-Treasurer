@@ -98,3 +98,6 @@ dist/
 
 .idea/
 *.swp
+
+# name-map 產生管線的中間檔（scratch；最終輸出在 data/name-map/*.json）
+data/name-map/.work/
