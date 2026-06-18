@@ -529,6 +529,71 @@ body {
   color: var(--ink);
 }
 
+/* ===== 特殊分頁版面（通貨等：依 layout 像素座標定位 + 子頁切換）===== */
+.layout-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.lay-sections {
+  display: flex;
+  gap: 8px;
+}
+.lay-pill {
+  padding: 5px 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 14px;
+  font: 500 12px/1 var(--sans);
+  background: var(--panel);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.lay-pill.on {
+  background: var(--ink);
+  color: var(--panel);
+}
+.lay-grid {
+  position: relative;
+  background: #d8d1c3;
+}
+.lay-slot {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lay-slot .lay-frame {
+  position: absolute;
+  inset: 2px;
+  border: 1px solid rgba(43, 42, 39, 0.18);
+  border-radius: 3px;
+}
+.lay-slot[data-id] {
+  cursor: pointer;
+}
+.lay-slot.sel {
+  outline: 2px solid #2b2a27;
+  outline-offset: -2px;
+  z-index: 2;
+}
+.lay-slot img {
+  position: relative;
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+}
+.lay-slot .stack {
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  font: 600 10px/1 var(--sans);
+  color: var(--ink);
+  text-shadow:
+    0 1px 2px #fff,
+    0 0 3px #fff;
+  pointer-events: none;
+}
+
 /* 銘牌的物品圖示 */
 .art.has-img {
   background: var(--panel-2);
@@ -563,7 +628,7 @@ body {
 .real-grid {
   position: relative;
   display: inline-block;
-  background: #15233f;
+  background: #d8d1c3;
   border: 1.5px solid #2b2a27;
   border-radius: 6px;
   padding: 3px;
@@ -579,7 +644,7 @@ body {
   inset: 3px;
 }
 .rg-bg .gcell {
-  border: 1px solid rgba(120, 140, 180, 0.16);
+  border: 1px solid rgba(43, 42, 39, 0.18);
 }
 
 .gitem {
@@ -588,7 +653,7 @@ body {
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in srgb, var(--rc) 55%, transparent);
-  background: color-mix(in srgb, var(--rc) 13%, #1b2c4d);
+  background: color-mix(in srgb, var(--rc) 16%, var(--panel));
   cursor: pointer;
   overflow: hidden;
 }
@@ -598,7 +663,7 @@ body {
   object-fit: contain;
 }
 .gitem.sel {
-  outline: 2px solid #f0ff80;
+  outline: 2px solid #2b2a27;
   outline-offset: -2px;
   z-index: 2;
 }
@@ -607,10 +672,10 @@ body {
   left: 2px;
   top: 1px;
   font: 600 10px/1 var(--sans);
-  color: #fff;
+  color: var(--ink);
   text-shadow:
-    0 1px 2px #000,
-    0 0 2px #000;
+    0 1px 2px #fff,
+    0 0 3px #fff;
   pointer-events: none;
 }
 

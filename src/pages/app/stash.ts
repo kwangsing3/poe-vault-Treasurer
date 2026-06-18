@@ -24,9 +24,25 @@ export interface StashItem {
   value: number; // mock 價值（混沌石 c）
   stack?: number; // 堆疊數（真實）
   icon: string;
-  x: number; y: number; w: number; h: number;
+  x: number; y: number; w: number; h: number; // 網格分頁＝格座標；特殊分頁＝x 為 slot 索引
   ilvl?: number; // 物品等級（真實）
   mods?: string[]; // 詞綴（implicit + explicit，真實）
+}
+
+// 特殊分頁（通貨/碎片/精華…）的固定版面：回應內附的 *Layout 物件。
+// slot 以像素座標定位（x/y），w/h 為格數、scale 為縮放；物品的 x 即此 slot 的索引。
+// 部分版面分多個 section（子頁），各 section 座標獨立，需切換顯示。
+export interface LayoutSlot {
+  section?: string | undefined;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  scale: number;
+}
+export interface StashLayout {
+  sections: string[]; // 子頁順序（無分區時為空陣列）
+  slots: Record<string, LayoutSlot>; // slot 索引 → 位置
 }
 
 export const STASH_TABS: StashTab[] = [
@@ -164,29 +180,57 @@ function rawToStashItem(raw: PoeStashItem, tab: number, idx: number): StashItem 
   return item;
 }
 
+/** 從回應抽出 *Layout 物件（currencyLayout / fragmentLayout…），正規化為 StashLayout。 */
+function extractLayout(res: Record<string, unknown>): StashLayout | undefined {
+  const key = Object.keys(res).find((k) => k.endsWith('Layout') && typeof res[k] === 'object' && res[k] !== null);
+  if (!key) return undefined;
+  const raw = res[key] as { sections?: unknown; layout?: unknown } & Record<string, unknown>;
+  // 形態一：{ sections, layout: {...} }；形態二：直接就是 slot map。
+  const slotMap = (raw.layout ?? raw) as Record<string, LayoutSlot>;
+  if (!slotMap || typeof slotMap !== 'object') return undefined;
+  const sections = Array.isArray(raw.sections)
+    ? raw.sections.filter((s): s is string => typeof s === 'string')
+    : [];
+  return { sections, slots: slotMap };
+}
+
 // ── 聯盟倉庫快取（vault）──────────────────────────────────────────────────
-// 以聯盟為 key 快取各聯盟的倉庫物品。切換聯盟時換倉庫內容；已載入過的聯盟直接用快取。
-// STASH_ITEMS 永遠指向「當前聯盟」的物品（live binding，所有引用共享同一陣列）。
+// 以聯盟為 key 快取各聯盟的倉庫物品與版面。切換聯盟時換內容；已載入過的聯盟直接用快取。
+// STASH_ITEMS / activeLayouts 永遠指向「當前聯盟」（live binding）。
 
-const VAULT = new Map<string, StashItem[]>();
+interface VaultData {
+  items: StashItem[];
+  layouts: Map<number, StashLayout>;
+}
+const VAULT = new Map<string, VaultData>();
+let activeLayouts = new Map<number, StashLayout>();
 
-/** 透過 API 逐頁載入指定聯盟的所有物品。 */
-async function fetchLeagueItems(league: string): Promise<StashItem[]> {
+/** 透過 API 逐頁載入指定聯盟的所有物品與特殊分頁版面。 */
+async function fetchLeague(league: string): Promise<VaultData> {
   const bridge = window.poe;
-  if (!bridge?.getStash) return [];
   const items: StashItem[] = [];
+  const layouts = new Map<number, StashLayout>();
+  if (!bridge?.getStash) return { items, layouts };
   for (const t of STASH_TABS) {
     const res = await bridge.getStash(t.i, league);
     if (!res || !Array.isArray(res.items)) continue;
     res.items.forEach((raw, idx) => items.push(rawToStashItem(raw, t.i, idx)));
+    const layout = extractLayout(res as unknown as Record<string, unknown>);
+    if (layout) layouts.set(t.i, layout);
   }
-  return items;
+  return { items, layouts };
 }
 
-/** 把指定聯盟的物品換進 STASH_ITEMS（沿用同一陣列，維持所有 live binding）。 */
-function setActiveItems(items: StashItem[]): void {
+/** 把指定聯盟的資料換進 STASH_ITEMS / activeLayouts（沿用同一陣列，維持 live binding）。 */
+function setActive(data: VaultData): void {
   STASH_ITEMS.length = 0;
-  STASH_ITEMS.push(...items);
+  STASH_ITEMS.push(...data.items);
+  activeLayouts = data.layouts;
+}
+
+/** 取得當前聯盟某分頁的特殊版面（無則 undefined，代表用一般網格）。 */
+export function tabLayout(tab: number): StashLayout | undefined {
+  return activeLayouts.get(tab);
 }
 
 /**
@@ -195,9 +239,9 @@ function setActiveItems(items: StashItem[]): void {
  */
 export async function loadLeagueVault(league: string, force = false): Promise<void> {
   if (force || !VAULT.has(league)) {
-    VAULT.set(league, await fetchLeagueItems(league));
+    VAULT.set(league, await fetchLeague(league));
   }
-  setActiveItems(VAULT.get(league)!);
+  setActive(VAULT.get(league)!);
 }
 
 /** 該聯盟是否已載入過（用於 UI 顯示「尚未同步」）。 */

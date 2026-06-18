@@ -7,8 +7,11 @@ import {
   isGridTab,
   searchItems,
   tabItems,
+  tabLayout,
   tabSize,
+  type LayoutSlot,
   type StashItem,
+  type StashLayout,
 } from '../stash';
 import { store, toSelected } from '../store';
 import { priceLinesHTML, priceStateFor, keyOf, setPriceResolveHook } from '../prices';
@@ -40,6 +43,84 @@ function typeLabel(type: string): string {
   return TYPE_LABEL[type] ?? '其他';
 }
 
+// ── 特殊分頁版面（Phase A：先做通貨）──────────────────────────────────────
+// 依回應內附的 layout（slot 像素座標）絕對定位物品；分多個 section 者提供子頁切換。
+const LAYOUT_TYPES = new Set(['CurrencyStash']);
+const LAYOUT_CELL = 64; // 版面像素座標的基準格大小（× slot.scale = 實際格大小）
+const SECTION_LABEL: Record<string, string> = {
+  general: '一般',
+  influence: '勢力',
+  league: '聯盟',
+};
+function sectionLabel(s: string): string {
+  return SECTION_LABEL[s] ?? s;
+}
+
+// 各分頁目前選中的 section（子頁），切換倉庫頁不影響彼此。
+const sectionState = new Map<number, string>();
+function activeSection(tab: number, layout: StashLayout): string | null {
+  if (layout.sections.length === 0) return null;
+  const cur = sectionState.get(tab);
+  return cur && layout.sections.includes(cur) ? cur : layout.sections[0]!;
+}
+
+function layoutHTML(tab: number, layout: StashLayout): string {
+  const sec = activeSection(tab, layout);
+  const first = layout.sections[0];
+  // 無 section 欄位的 slot 歸到第一個子頁；無分區時全部顯示。
+  const inSection = (s: LayoutSlot): boolean =>
+    sec === null ? true : (s.section ?? first) === sec;
+
+  const bySlot = new Map<string, StashItem>();
+  for (const it of tabItems(tab)) bySlot.set(String(it.x), it);
+
+  const selName = store.selectedItem?.name;
+  // 先收集本子頁有物品的格子，算出內容邊界（含 min）。
+  const filled = Object.entries(layout.slots)
+    .filter(([idx, s]) => inSection(s) && bySlot.has(idx))
+    .map(([idx, s]) => ({
+      it: bySlot.get(idx)!,
+      x: s.x,
+      y: s.y,
+      w: LAYOUT_CELL * s.w * s.scale,
+      h: LAYOUT_CELL * s.h * s.scale,
+    }));
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxR = 0;
+  let maxB = 0;
+  for (const c of filled) {
+    minX = Math.min(minX, c.x);
+    minY = Math.min(minY, c.y);
+    maxR = Math.max(maxR, c.x + c.w);
+    maxB = Math.max(maxB, c.y + c.h);
+  }
+  if (!Number.isFinite(minX)) {
+    minX = 0;
+    minY = 0;
+  }
+
+  // 整體位移到左上、容器收緊到內容範圍，避免右下大片空白。
+  const cells = filled.map((c) => {
+    const inner = `<img src="${c.it.icon}" alt="${c.it.name}" loading="lazy" />${c.it.stack !== undefined ? `<span class="stack">${c.it.stack}</span>` : ''}`;
+    const sel = c.it.name === selName ? ' sel' : '';
+    return `<div class="lay-slot${sel}" data-id="${c.it.id}" title="${c.it.name}" style="left:${(c.x - minX).toFixed(1)}px;top:${(c.y - minY).toFixed(1)}px;width:${c.w.toFixed(1)}px;height:${c.h.toFixed(1)}px;"><div class="lay-frame"></div>${inner}</div>`;
+  });
+
+  const pills =
+    layout.sections.length > 1
+      ? `<div class="lay-sections">${layout.sections
+          .map((n) => `<span class="lay-pill ${n === sec ? 'on' : ''}" data-section="${n}">${sectionLabel(n)}</span>`)
+          .join('')}</div>`
+      : '';
+
+  return `<div class="layout-wrap">
+    ${pills}
+    <div class="real-grid lay-grid" style="width:${Math.ceil(maxR - minX)}px;height:${Math.ceil(maxB - minY)}px;">${cells.join('')}</div>
+  </div>`;
+}
+
 function isSearching(): boolean {
   return store.searchQuery.trim().length > 0;
 }
@@ -66,6 +147,20 @@ function gridHTML(): string {
     return `<div class="real-grid search" style="--cell:${NORMAL_CELL}px;--n:12;">
       <div class="rg-flow">${items || '<span class="rg-empty">沒有符合的物品</span>'}</div>
     </div>`;
+  }
+
+  // 特殊分頁版面（Phase A：通貨）——依回應 layout 絕對定位，只畫有物品的格子。
+  // 空頁（該聯盟此分頁無物品）則 fall through 到下方的空頁網格 + 提示。
+  const tabMeta = STASH_TABS.find((x) => x.i === tab);
+  const layout = tabLayout(tab);
+  if (
+    layout &&
+    tabMeta &&
+    LAYOUT_TYPES.has(tabMeta.type) &&
+    Object.keys(layout.slots).length > 0 &&
+    tabItems(tab).length > 0
+  ) {
+    return layoutHTML(tab, layout);
   }
 
   const items = tabItems(tab);
@@ -220,10 +315,21 @@ export const overview: View = {
       );
     };
 
+    // 特殊分頁的子頁（section）切換：記住該分頁選的子頁，就地重繪網格。
+    const wireSections = () => {
+      gridEl?.querySelectorAll<HTMLElement>('[data-section]').forEach((el) =>
+        el.addEventListener('click', () => {
+          sectionState.set(store.activeTab, el.dataset['section']!);
+          refreshGrid();
+        }),
+      );
+    };
+
     const refreshGrid = () => {
       if (gridEl) gridEl.innerHTML = gridHTML();
       if (footerEl) footerEl.textContent = footerHTML();
       wireCells();
+      wireSections();
     };
 
     const search = root.querySelector<HTMLInputElement>('#ov-search');
@@ -249,6 +355,7 @@ export const overview: View = {
     );
 
     wireCells();
+    wireSections();
     refreshPlaque();
 
     // 背景估價回來時，若更新的正是當前選中的傳奇物品，就地刷新銘牌的市場價。
