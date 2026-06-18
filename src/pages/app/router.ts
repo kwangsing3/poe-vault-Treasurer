@@ -35,6 +35,23 @@ export function navigate(route: Route): void {
   location.hash = `#/${route}`;
 }
 
+// 視窗控制鈕圖示（10×10 線稿，currentColor）。
+const ICON_MIN = '<svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1"/></svg>';
+const ICON_MAX = '<svg width="10" height="10" viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+const ICON_RESTORE = '<svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="3" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1"/><path d="M3 3 V1 H9 V7 H7" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+const ICON_CLOSE = '<svg width="10" height="10" viewBox="0 0 10 10"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="currentColor" stroke-width="1"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="currentColor" stroke-width="1"/></svg>';
+
+let windowMaximized = false;
+
+function winControls(): string {
+  return `
+    <div class="winctl">
+      <button class="wc" data-win="min" aria-label="最小化" title="最小化">${ICON_MIN}</button>
+      <button class="wc" data-win="max" aria-label="最大化" title="最大化">${windowMaximized ? ICON_RESTORE : ICON_MAX}</button>
+      <button class="wc wc-close" data-win="close" aria-label="關閉" title="關閉">${ICON_CLOSE}</button>
+    </div>`;
+}
+
 function topbar(route: Route): string {
   const nav = NAV.map(
     (n) => `<button class="nav-btn ${n.route === route ? 'active' : ''}" data-nav="${n.route}">${n.label}</button>`,
@@ -57,6 +74,7 @@ function topbar(route: Route): string {
         <span class="lbl">總資產</span>
         <span class="val">${formatStashTotal(store.baseCurrency)}</span>
       </div>
+      ${winControls()}
     </div>`;
 }
 
@@ -75,6 +93,22 @@ function render(): void {
   app.querySelector<HTMLSelectElement>('#league-sel')?.addEventListener('change', (e) =>
     switchLeague((e.target as HTMLSelectElement).value),
   );
+
+  // 自繪視窗控制鈕
+  const winActions: Record<string, () => void> = {
+    min: () => window.win?.minimize(),
+    max: () => window.win?.maximizeToggle(),
+    close: () => window.win?.close(),
+  };
+  app.querySelectorAll<HTMLElement>('[data-win]').forEach((el) =>
+    el.addEventListener('click', () => winActions[el.dataset['win']!]?.()),
+  );
+  // 雙擊標題列空白處＝切換最大化（補回原生行為）；點到互動元素則略過。
+  app.querySelector<HTMLElement>('.topbar')?.addEventListener('dblclick', (e) => {
+    if (!(e.target as HTMLElement).closest('.nav-btn, .league, .asset-pill, .winctl')) {
+      window.win?.maximizeToggle();
+    }
+  });
 
   const content = app.querySelector<HTMLElement>('#content')!;
   const view = routes[route];
@@ -126,6 +160,12 @@ export function start(root: HTMLElement): void {
   app.classList.add('app');
   window.addEventListener('hashchange', render);
   subscribe(render); // 任何 store 變更都重繪（含 header 的總資產）
+  // 視窗最大化狀態：更新最大化鈕的圖示（最大化 ↔ 還原）。
+  window.win?.onMaximizeChange((m) => {
+    windowMaximized = m;
+    const btn = app.querySelector<HTMLElement>('[data-win="max"]');
+    if (btn) btn.innerHTML = m ? ICON_RESTORE : ICON_MAX;
+  });
   if (!location.hash) location.hash = '#/overview';
   render();
   void loadLeagues();

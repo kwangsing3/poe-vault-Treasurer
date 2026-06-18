@@ -12,3 +12,12 @@ contextBridge.exposeInMainWorld('poe', {
     ipcRenderer.invoke('poe:currencyPrice', league, want, have),
   getCurrencyCodes: () => ipcRenderer.invoke('poe:currencyCodes'),
 });
+
+// 自繪標題列的視窗控制橋接。
+contextBridge.exposeInMainWorld('win', {
+  minimize: () => ipcRenderer.send('win:minimize'),
+  maximizeToggle: () => ipcRenderer.send('win:maximizeToggle'),
+  close: () => ipcRenderer.send('win:close'),
+  onMaximizeChange: (cb: (maximized: boolean) => void) =>
+    ipcRenderer.on('win:maximized', (_e, maximized: boolean) => cb(maximized)),
+});

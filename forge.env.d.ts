@@ -92,6 +92,15 @@ interface PoePriceQuote {
   sampleSize: number;
   listings: PoePriceListing[];
 }
+// 自繪標題列的視窗控制橋接。
+interface WinBridge {
+  minimize(): void;
+  maximizeToggle(): void;
+  close(): void;
+  /** 視窗最大化狀態變化時回呼（供切換最大化/還原圖示）。 */
+  onMaximizeChange(cb: (maximized: boolean) => void): void;
+}
 interface Window {
   poe: PoeBridge;
+  win: WinBridge;
 }
