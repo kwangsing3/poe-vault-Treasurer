@@ -12,6 +12,23 @@ TypeScript + Vite**（由 Electron Forge 驅動建置與發佈）。
 Design 線框實作成博物館風格的 SPA（5 個頁面，先做高密度 A 變體），但資料仍是 mock、
 PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 
+## 長期目標：中文化物品過濾器編輯器（對標 FilterBlade）
+
+除了財務管家本身，本專案的長期目標是新增一個**對標 [FilterBlade.xyz](https://www.filterblade.xyz/?game=Poe1) 的繁中物品過濾器（loot filter）編輯器**，以**新頁籤**整合進這個 app、共用同套技術棧與物品/估價資料。核心能力：
+
+- **用工具編輯/「編譯」物品過濾器**：在繁中 UI 設定規則（條件 + 動作），產出**可直接在台服遊戲內載入、相容 GGG 官方格式的合法 `.filter`**。
+- **預覽結果**：在 app 內預覽規則套用後的外觀（顏色/邊框/字級/小地圖圖示等），並能對倉庫頁物品做顯示層套用（高亮/淡化）。
+
+**關鍵前提（已查證，詳見 [`FILTER-EDITOR-ANALYSIS.md`](./FILTER-EDITOR-ANALYSIS.md)）：**
+- 平台為 **PoE1 + 台服（Hotcool）客戶端**。**台服 filter 引擎英文與繁中 `BaseType`/`Class` 都接受**（2026-06 使用者實測更正先前誤判）→ 產出 `.filter` **可維持英文以求全相容**；中文化是「顯示/閱讀層」需求，非匹配需求。完整規則見 [`POE1-FILTER-RULES.md`](./POE1-FILTER-RULES.md)。
+- 顯示層（中文）與產出層（filter 字串）須分離；規則內部以語言無關鍵儲存，序列化時可輸出英文（預設、全相容）或可選繁中。`data/name-map/` 提供英↔中對照供 UI 顯示。
+- `NeverSink-Filter` 成品為 **MIT 可重用**；但其 precursor→編譯管線無授權/已下架，不重建。
+
+**一步一步來**：財務管家的資料/同步先行；filter 編輯器**已起步**——「物品過濾器」頁籤已可
+**讀取/匯入 `.filter`（含整份 NeverSink，無損 round-trip）、分節折疊瀏覽、搜尋、繁中 base 顯示、即時預覽、匯出**。
+進階條件目前以唯讀 passthrough 保留（尚未全可編輯）；倉庫頁套用、台服資料夾直讀為後續。完整 DSL 規格、
+資料來源、架構選項、MVP 範圍與待決問題見 `FILTER-EDITOR-ANALYSIS.md`。
+
 ## 架構
 
 - **main 進程**（`src/main.ts`）：建立 `BrowserWindow`、載入 renderer。開發時載入
@@ -42,10 +59,18 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
   「主流幣別」分別累加成混沌石/神聖石總額（不換算、不重複計），並產出分類小計。每小時對當前聯盟
   快照存 `localStorage`，最多保留 30 天、逾期丟棄（供報表走勢圖）。
 - `store.ts` — 共用狀態（`subscribe` / `update`，含 `lastSync`）
+- `filter.ts` — 物品過濾器的**語言無關資料模型 + `.filter` 解析/序列化**。`FilterBlock`（含
+  `comments`/`headerComment`/`unknown`/`cont` 等無損欄位）；`parseFilter()` 把任意 `.filter`（含整份
+  NeverSink）切成結構化區塊，**認得的條件/動作進可編輯欄位、不認得的整行原樣存 `unknown[]`**，序列化時
+  原樣吐回（無損 round-trip，見 `scripts/test-filter-roundtrip.mts` / `inspect-neversink.mts`）。
+- `base-zh.json` — 英文 base/通貨 → 繁中對照（顯示層用），由 `scripts/build-base-zh.mjs` 從 `data/name-map/`
+  萃取；filter 頁把規則的英文 `BaseType` 顯示成中文。
 - `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈；`switchLeague` / `syncLeague` 換聯盟並重載 vault +
-  背景估價；頂部「總資產」走 `formatStashTotal`
-- `views/` — `overview` / `detail` / `search` / `report` / `settings` 五頁，各匯出 `View`
-  （`render(): string` + 選用 `mount(root)`）
+  背景估價；頂部「總資產」走 `formatStashTotal`。左上角**深色/淺色切換鈕**（`data-theme` 屬性 + localStorage
+  持久化，色票以 CSS 變數覆寫）。
+- `views/` — `overview` / `detail` / `search` / `report` / `filter` / `settings` 六頁，各匯出 `View`
+  （`render(): string` + 選用 `mount(root)`）。`filter` 為物品過濾器頁：讀取/匯入 `.filter`、依
+  NeverSink `# [[NNNN]]` 標記分節折疊、搜尋、即時預覽、匯出。
 
 慣例與重點：
 - **倉庫頁尺寸**：依分頁類型，`QuadStash` 為 24×24，其餘 12×12（見 `tabSize()`）。
@@ -68,6 +93,21 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 
 - `mock/trade-data/` 是上述靜態端點的快照，供開發/測試離線使用（內容為大型 JSON，
   stats 約 1.7MB）。需要更新時重新抓取對應端點即可。
+
+#### 中英名稱對照表（`data/name-map/`）
+
+為 filter 編輯器與「日後接國際服」準備的繁中↔英文對照層。英文側快照存
+`mock/trade-data/en/{items,static,stats}.json`（來源 `https://www.pathofexile.com/api/trade/data/*`）。
+
+**產生管線（兩步）：**
+1. `scripts/harvest-poedb.mjs` — 從 POEDB（poedb.tw）每物品分類頁的 `/tw/` + `/us/` 兩語言版，以**語言無關 slug** inner-join 出權威 zh↔en 字典 → `data/name-map/poedb-dict.json`（base + unique + gem）。POEDB 兩語言版是同一份 GGPK，筆數/順序一致，故 slug-join 高信心。HTML 需先用 curl（瀏覽器 UA）抓到 `POEDB_HTML_DIR/{tw,us}/<Class>.html`。
+2. `scripts/build-name-map.mjs` — 產出最終對照表 `data/name-map/{currency,stats,items}.json` + `REPORT.md`。
+
+**對齊策略：**
+- **currency / stats**：兩服 trade data 以逐筆語言無關 `id` join（高信心）。
+- **items（裝備/寶石）**：trade 無逐筆 id，先以分類 `id` 分組、拆 base/unique 子序列位置對齊，**再用 `poedb-dict.json` 的 zh→en 覆寫**（命中即 `confidence:high`、`source:poedb`，並修正位置錯位）；未命中者退回位置對齊結果（`source:positional`，多為 `low`）。
+- **已知陷阱**：items「整體筆數相同 ≠ 對齊正確」（base/unique 各差一筆會互相抵銷造成靜默錯位）。逐筆看 `confidence` 與 `source`，`source:poedb` 才是經第三方佐證的高信心。
+- **已知缺口**：地圖（trade 保留大量已移除舊地圖，POEDB 當前頁不含）、物品化怪物（圖鑑）、聯盟石等屬 `low`，filter 多以 tier/class 規則處理，非逐基底名。currency 一律用 `currency.json`（items 內的 currency 分類為冗餘）。
 - **聯盟清單是即時取得**（公用、無需登入）：`src/api/trade.ts` 的 `fetchLeagues()` 在主進程直接打
   上表端點，回傳 `{ id, realm, text }[]`，供 renderer 右上角聯盟切換。不做 mock。
 - 透過 [`http.mod.ts`](./src/utility/http.mod.ts) 取用線上資料時，記得套用速率限制。

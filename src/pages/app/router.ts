@@ -7,27 +7,29 @@ import { detail } from './views/detail';
 import { search } from './views/search';
 import { report } from './views/report';
 import { settings } from './views/settings';
+import { filter } from './views/filter';
 
 export interface View {
   render(): string;
   mount?(root: HTMLElement): void;
 }
 
-export type Route = 'overview' | 'detail' | 'search' | 'report' | 'settings';
+export type Route = 'overview' | 'detail' | 'search' | 'report' | 'filter' | 'settings';
 
 const NAV: { route: Route; label: string }[] = [
   { route: 'overview', label: '總覽' },
   { route: 'detail', label: '詳情' },
   { route: 'search', label: '搜尋' },
   { route: 'report', label: '報表' },
+  { route: 'filter', label: '過濾器' },
   { route: 'settings', label: '設定' },
 ];
 
-const routes: Record<Route, View> = { overview, detail, search, report, settings };
+const routes: Record<Route, View> = { overview, detail, search, report, filter, settings };
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, '') as Route;
-  return hash in routes ? hash : 'overview';
+  return hash in routes ? hash : 'filter';
 }
 
 /** 切換頁面：只改 hash，實際重繪交給 hashchange */
@@ -40,6 +42,25 @@ const ICON_MIN = '<svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y
 const ICON_MAX = '<svg width="10" height="10" viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
 const ICON_RESTORE = '<svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="3" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1"/><path d="M3 3 V1 H9 V7 H7" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
 const ICON_CLOSE = '<svg width="10" height="10" viewBox="0 0 10 10"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="currentColor" stroke-width="1"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="currentColor" stroke-width="1"/></svg>';
+
+// 主題切換鈕圖示：淺色時顯示月亮（點→深色）、深色時顯示太陽（點→淺色）。
+const ICON_MOON = '<svg width="15" height="15" viewBox="0 0 16 16"><path d="M11 1a6 6 0 1 0 4 10.5A5 5 0 0 1 11 1Z" fill="currentColor"/></svg>';
+const ICON_SUN = '<svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.2" fill="currentColor"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="8" y1="1" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="15"/><line x1="1" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="15" y2="8"/><line x1="3" y1="3" x2="4.4" y2="4.4"/><line x1="11.6" y1="11.6" x2="13" y2="13"/><line x1="13" y1="3" x2="11.6" y2="4.4"/><line x1="4.4" y1="11.6" x2="3" y2="13"/></g></svg>';
+
+const THEME_KEY = 'poe-theme';
+type Theme = 'light' | 'dark';
+function currentTheme(): Theme {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+/** 套用主題到 documentElement 並持久化。 */
+export function applyTheme(t: Theme): void {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem(THEME_KEY, t); } catch { /* 隱私模式忽略 */ }
+}
+function toggleTheme(): void {
+  applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+  render(); // 重繪以更新切換鈕圖示
+}
 
 let windowMaximized = false;
 
@@ -63,6 +84,7 @@ function topbar(route: Route): string {
 
   return `
     <div class="topbar">
+      <button class="theme-toggle" data-theme-toggle title="切換深色 / 淺色">${currentTheme() === 'dark' ? ICON_SUN : ICON_MOON}</button>
       <div class="glyph"></div>
       <span class="brand">藏 品 庫 · THE RELIQUARY</span>
       <div class="nav">${nav}</div>
@@ -93,6 +115,8 @@ function render(): void {
   app.querySelector<HTMLSelectElement>('#league-sel')?.addEventListener('change', (e) =>
     switchLeague((e.target as HTMLSelectElement).value),
   );
+
+  app.querySelector<HTMLElement>('[data-theme-toggle]')?.addEventListener('click', toggleTheme);
 
   // 自繪視窗控制鈕
   const winActions: Record<string, () => void> = {
@@ -168,6 +192,11 @@ export function switchLeague(league: string): void {
 export function start(root: HTMLElement): void {
   app = root;
   app.classList.add('app');
+  // 還原使用者主題偏好（預設淺色）。
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    applyTheme(saved === 'dark' ? 'dark' : 'light');
+  } catch { /* 隱私模式：維持淺色 */ }
   window.addEventListener('hashchange', render);
   subscribe(render); // 任何 store 變更都重繪（含 header 的總資產）
   // 視窗最大化狀態：更新最大化鈕的圖示（最大化 ↔ 還原）。
@@ -176,7 +205,7 @@ export function start(root: HTMLElement): void {
     const btn = app.querySelector<HTMLElement>('[data-win="max"]');
     if (btn) btn.innerHTML = m ? ICON_RESTORE : ICON_MAX;
   });
-  if (!location.hash) location.hash = '#/overview';
+  if (!location.hash) location.hash = '#/filter';
   render();
   void loadAuthStatus();
   void loadLeagues();
