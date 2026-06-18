@@ -73,7 +73,7 @@ export const detail: View = {
     return `
       <div class="page-head">
         <span class="num">02</span><span class="ttl">物品詳情 · 展櫃</span>
-        <span class="sub">單件查價 / 擺攤定價</span>
+        <span class="sub">單件查價</span>
       </div>
       <div class="panel">
         <div class="panel-bar">
