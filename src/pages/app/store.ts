@@ -53,6 +53,10 @@ export interface AppState {
   lastSync: number | null;
   /** 報表走勢的時間級距 */
   trendRange: '24h' | '7d' | '30d';
+  /** 是否已連結 PoE 帳號（OAuth） */
+  authConnected: boolean;
+  /** 已連結的帳號名（未連結為 null） */
+  account: string | null;
 }
 
 /** 聯盟清單的離線後備（抓取失敗時使用） */
@@ -71,6 +75,8 @@ export const store: AppState = {
   autoSync: true,
   lastSync: null,
   trendRange: '7d',
+  authConnected: false,
+  account: null,
 };
 
 /** 訂閱者：狀態變更後要重繪的回呼（由 router 註冊） */

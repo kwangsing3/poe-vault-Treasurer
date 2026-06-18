@@ -8,6 +8,7 @@ import {
   getCurrencyPrice,
   currencyCodeByName,
 } from "./api";
+import { login as authLogin, logout as authLogout, getStatus as authStatus } from "./api/oauth";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -44,6 +45,11 @@ ipcMain.handle(
 
 // 通貨名稱 → trade code 對照（renderer 解析倉庫通貨名以呼叫 currencyPrice）。
 ipcMain.handle("poe:currencyCodes", () => currencyCodeByName());
+
+// 帳號連結（OAuth public client + PKCE + loopback）。token 僅留在主進程，不回傳給 renderer。
+ipcMain.handle("auth:login", () => authLogin());
+ipcMain.handle("auth:logout", () => authLogout());
+ipcMain.handle("auth:status", () => authStatus());
 
 const createWindow = () => {
   // Create the browser window.
@@ -85,7 +91,6 @@ const createWindow = () => {
       mainWindow.webContents.toggleDevTools();
     }
   });
-
 };
 
 // This method will be called when Electron has finished

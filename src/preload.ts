@@ -13,6 +13,13 @@ contextBridge.exposeInMainWorld('poe', {
   getCurrencyCodes: () => ipcRenderer.invoke('poe:currencyCodes'),
 });
 
+// 帳號連結（OAuth）橋接。
+contextBridge.exposeInMainWorld('auth', {
+  login: () => ipcRenderer.invoke('auth:login'),
+  logout: () => ipcRenderer.invoke('auth:logout'),
+  status: () => ipcRenderer.invoke('auth:status'),
+});
+
 // 自繪標題列的視窗控制橋接。
 contextBridge.exposeInMainWorld('win', {
   minimize: () => ipcRenderer.send('win:minimize'),

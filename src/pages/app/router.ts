@@ -134,6 +134,16 @@ async function loadLeagues(): Promise<void> {
   if (store.league !== prev) syncLeague();
 }
 
+/** 啟動時讀取既有 OAuth 登入狀態（token 持久化在主進程）；已登入則更新 store。 */
+async function loadAuthStatus(): Promise<void> {
+  const s = await window.auth?.status();
+  if (!s) return;
+  update((st) => {
+    st.authConnected = s.connected;
+    st.account = s.account ?? null;
+  });
+}
+
 /** 載入當前聯盟的倉庫（force 時忽略快取重抓），記錄同步時間、重繪，並在背景拉取傳奇估價。 */
 export function syncLeague(force = false): void {
   void loadLeagueVault(store.league, force).then(() => {
@@ -168,6 +178,7 @@ export function start(root: HTMLElement): void {
   });
   if (!location.hash) location.hash = '#/overview';
   render();
+  void loadAuthStatus();
   void loadLeagues();
   // 載入當前聯盟的倉庫物品（透過 API；目前回傳 mock），完成後重繪以填入各頁內容與總資產。
   syncLeague();

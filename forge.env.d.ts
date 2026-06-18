@@ -100,7 +100,21 @@ interface WinBridge {
   /** 視窗最大化狀態變化時回呼（供切換最大化/還原圖示）。 */
   onMaximizeChange(cb: (maximized: boolean) => void): void;
 }
+// 帳號連結（OAuth）橋接。
+interface AuthStatus {
+  connected: boolean;
+  account?: string;
+}
+interface AuthBridge {
+  /** 啟動 OAuth 登入（開系統瀏覽器 + loopback）。成功回連線狀態，失敗 throw。 */
+  login(): Promise<AuthStatus>;
+  /** 登出並清除本機 token。 */
+  logout(): Promise<void>;
+  /** 目前連線狀態（是否已登入、帳號名）。 */
+  status(): Promise<AuthStatus>;
+}
 interface Window {
   poe: PoeBridge;
   win: WinBridge;
+  auth: AuthBridge;
 }

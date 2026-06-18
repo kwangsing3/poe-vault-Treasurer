@@ -39,13 +39,21 @@ export const settings: View = {
           <div class="account">
             <div class="avatar"></div>
             <div style="display:flex;flex-direction:column;gap:4px;">
-              <span style="font:600 14px/1 var(--sans);">PoE 帳號 · Exile#1234</span>
-              <span class="pos" style="display:flex;align-items:center;gap:7px;font:500 12px/1 var(--sans);">
-                <span style="width:8px;height:8px;border-radius:50%;background:var(--pos);"></span>已連接 · OAuth
+              <span style="font:600 14px/1 var(--sans);">${
+                store.authConnected ? `PoE 帳號 · ${store.account ?? '已連結'}` : 'PoE 帳號 · 未連結'
+              }</span>
+              <span class="${store.authConnected ? 'pos' : 'ink-2'}" style="display:flex;align-items:center;gap:7px;font:500 12px/1 var(--sans);">
+                <span style="width:8px;height:8px;border-radius:50%;background:${store.authConnected ? 'var(--pos)' : 'var(--muted)'};"></span>${
+                  store.authConnected ? '已連接 · OAuth' : '尚未連接'
+                }
               </span>
             </div>
             <div style="flex:1;"></div>
-            <button class="btn" style="height:auto;padding:8px 14px;">斷開</button>
+            ${
+              store.authConnected
+                ? `<button class="btn" id="auth-logout" style="height:auto;padding:8px 14px;">斷開</button>`
+                : `<button class="btn btn-dark" id="auth-login" style="height:auto;padding:8px 14px;">連接帳號</button>`
+            }
           </div>
 
           <div style="display:flex;flex-direction:column;gap:16px;">
@@ -104,5 +112,34 @@ export const settings: View = {
 
     // 立即同步：忽略快取重抓當前聯盟倉庫，完成後更新「上次同步」並重繪。
     root.querySelector<HTMLElement>('#set-sync')?.addEventListener('click', () => syncLeague(true));
+
+    // 連接帳號：開啟 OAuth 流程（系統瀏覽器 + loopback）；成功後寫入 store 並重繪。
+    const loginBtn = root.querySelector<HTMLButtonElement>('#auth-login');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', async () => {
+        loginBtn.textContent = '等待授權…';
+        loginBtn.disabled = true;
+        try {
+          const res = await window.auth.login();
+          update((s) => {
+            s.authConnected = res.connected;
+            s.account = res.account ?? null;
+          });
+        } catch (e) {
+          loginBtn.textContent = '連接帳號';
+          loginBtn.disabled = false;
+          alert(`登入失敗：${e instanceof Error ? e.message : String(e)}`);
+        }
+      });
+    }
+
+    // 斷開：清除本機 token 並更新狀態。
+    root.querySelector<HTMLElement>('#auth-logout')?.addEventListener('click', async () => {
+      await window.auth.logout();
+      update((s) => {
+        s.authConnected = false;
+        s.account = null;
+      });
+    });
   },
 };
