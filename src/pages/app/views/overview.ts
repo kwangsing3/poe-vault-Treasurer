@@ -28,7 +28,7 @@ function itemHTML(it: StashItem, positioned: boolean): string {
     ? `grid-column:${it.x + 1}/span ${it.w};grid-row:${it.y + 1}/span ${it.h};`
     : '';
   const stack = it.stack !== undefined ? `<span class="stack">${it.stack}</span>` : '';
-  return `<div class="gitem ${sel}" style="${pos}--rc:${RARITY_COLOR[it.rarity]};" data-id="${it.id}" title="${it.name}">
+  return `<div class="gitem ${sel}" style="${pos}--rc:${RARITY_COLOR[it.rarity]};" data-id="${it.id}" data-rarity="${it.rarity}" title="${it.name}">
     <img src="${it.icon}" alt="${it.name}" loading="lazy" />${stack}
   </div>`;
 }
