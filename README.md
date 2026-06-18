@@ -1,5 +1,13 @@
 # PoE Vault Treasurer
 
+[![Release](https://img.shields.io/github/actions/workflow/status/kwangsing3/poe-coco-Treasurer/release.yml?label=release%20build)](https://github.com/kwangsing3/poe-coco-Treasurer/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/kwangsing3/poe-coco-Treasurer?display_name=tag)](https://github.com/kwangsing3/poe-coco-Treasurer/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+![Electron](https://img.shields.io/badge/Electron-2b2a27?logo=electron&logoColor=9feaf9)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-646cff?logo=vite&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Windows-0078d6)
+
 > Path of Exile 的「金庫財務管家」桌面應用程式 — 連結你的 PoE 帳號，讀取 stash tabs、對物品估價，並追蹤你的總財富變化。
 
 以 **Electron + TypeScript + Vite** 打造的跨平台桌面工具。目標是讓玩家在開遊戲前後快速掌握自己的資產：現在值多少 chaos / divine、各 stash tab 裡有什麼、財富隨時間怎麼變動。
