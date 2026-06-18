@@ -561,6 +561,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 85% 黑色襯底，與格子物品一致 */
+  background: rgba(0, 0, 0, 0.15);
 }
 .lay-slot .lay-frame {
   position: absolute;
@@ -572,7 +574,7 @@ body {
   cursor: pointer;
 }
 .lay-slot.sel {
-  outline: 2px solid #2b2a27;
+  outline: 2px solid #f0ff80;
   outline-offset: -2px;
   z-index: 2;
 }
@@ -587,10 +589,10 @@ body {
   left: 3px;
   top: 1px;
   font: 600 10px/1 var(--sans);
-  color: var(--ink);
+  color: #fff;
   text-shadow:
-    0 1px 2px #fff,
-    0 0 3px #fff;
+    0 1px 2px #000,
+    0 0 2px #000;
   pointer-events: none;
 }
 
@@ -653,7 +655,8 @@ body {
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in srgb, var(--rc) 55%, transparent);
-  background: color-mix(in srgb, var(--rc) 16%, var(--panel));
+  /* 85% 黑色襯底：物品圖示更跳，保留些許透明讓底下格線透出 */
+  background: rgba(0, 0, 0, 0.15);
   cursor: pointer;
   overflow: hidden;
 }
@@ -663,7 +666,7 @@ body {
   object-fit: contain;
 }
 .gitem.sel {
-  outline: 2px solid #2b2a27;
+  outline: 2px solid #f0ff80;
   outline-offset: -2px;
   z-index: 2;
 }
@@ -672,10 +675,10 @@ body {
   left: 2px;
   top: 1px;
   font: 600 10px/1 var(--sans);
-  color: var(--ink);
+  color: #fff;
   text-shadow:
-    0 1px 2px #fff,
-    0 0 3px #fff;
+    0 1px 2px #000,
+    0 0 2px #000;
   pointer-events: none;
 }
 
