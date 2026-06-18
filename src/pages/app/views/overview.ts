@@ -18,6 +18,28 @@ import type { View } from '../router';
 const QUAD_CELL = 30; // px
 const NORMAL_CELL = 46; // px
 
+// 倉庫類型 → 短標籤（顯示在分頁籤上，標註該頁的倉庫類型）。
+const TYPE_LABEL: Record<string, string> = {
+  NormalStash: '一般',
+  PremiumStash: '高級',
+  QuadStash: '巨型',
+  CurrencyStash: '通貨',
+  FragmentStash: '碎片',
+  MapStash: '地圖',
+  EssenceStash: '精華',
+  DivinationCardStash: '命運',
+  DeliriumStash: '譫妄',
+  UltimatumStash: '通牒',
+  BlightStash: '凋落',
+  DelveStash: '化石',
+  UniqueStash: '傳奇',
+  GemStash: '寶石',
+  FlaskStash: '藥劑',
+};
+function typeLabel(type: string): string {
+  return TYPE_LABEL[type] ?? '其他';
+}
+
 function isSearching(): boolean {
   return store.searchQuery.trim().length > 0;
 }
@@ -47,22 +69,28 @@ function gridHTML(): string {
   }
 
   const items = tabItems(tab);
+  const bg = Array.from({ length: n * n }, () => '<div class="gcell"></div>').join('');
 
-  // 特殊分頁（通貨/碎片/卡…）座標非格線，改用 flow 排列。
-  if (!isGridTab(tab)) {
-    const flow = items.map((it) => itemHTML(it, false)).join('');
-    return `<div class="real-grid search" style="--cell:${NORMAL_CELL}px;--n:12;">
-      <div class="rg-flow">${flow || '<span class="rg-empty">此頁沒有物品</span>'}</div>
+  // 空頁：仍畫出倉庫網格（依分頁尺寸），疊上提示——讓空分頁看起來仍是一個倉庫。
+  if (items.length === 0) {
+    return `<div class="real-grid" style="--cell:${cell}px;--n:${n};">
+      <div class="rg-bg">${bg}</div>
+      <div class="rg-hint">此頁沒有物品</div>
     </div>`;
   }
 
-  const bg = Array.from({ length: n * n }, () => '<div class="gcell"></div>').join('');
+  // 特殊分頁（通貨/碎片/卡…）座標非格線，有物品時改用 flow 排列。
+  if (!isGridTab(tab)) {
+    const flow = items.map((it) => itemHTML(it, false)).join('');
+    return `<div class="real-grid search" style="--cell:${NORMAL_CELL}px;--n:12;">
+      <div class="rg-flow">${flow}</div>
+    </div>`;
+  }
+
   const gitems = items.map((it) => itemHTML(it, true)).join('');
-  const empty = items.length === 0 ? '<div class="rg-hint">此頁沒有物品</div>' : '';
   return `<div class="real-grid" style="--cell:${cell}px;--n:${n};">
     <div class="rg-bg">${bg}</div>
     <div class="rg-items">${gitems}</div>
-    ${empty}
   </div>`;
 }
 
@@ -125,7 +153,7 @@ export const overview: View = {
     const tabs = STASH_TABS.map((t) => {
       const active = t.i === store.activeTab && !isSearching() ? 'active' : '';
       const dot = `rgb(${t.r},${t.g},${t.b})`;
-      const badge = t.quad ? '<span class="badge">巨</span>' : '';
+      const badge = `<span class="badge ${t.quad ? 'badge-quad' : ''}">${typeLabel(t.type)}</span>`;
       return `<div class="tab-item ${active}" data-tab="${t.i}">
         <span class="sq" style="background:${dot};"></span><span class="tn">${t.n}</span>${badge}
       </div>`;

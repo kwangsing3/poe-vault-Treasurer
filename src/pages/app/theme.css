@@ -113,7 +113,9 @@ body {
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 .wc:hover {
   background: rgba(43, 42, 39, 0.1);
@@ -380,7 +382,7 @@ body {
   min-height: 560px;
 }
 .tab-rail {
-  width: 130px;
+  width: 160px;
   border-right: 1.5px solid var(--ink);
   padding: 14px 12px;
   display: flex;
@@ -504,14 +506,25 @@ body {
 /* 倉庫頁的巨型標記 */
 .tab-item .badge {
   margin-left: auto;
+  flex-shrink: 0;
   font: 600 9px/1 var(--sans);
   letter-spacing: 0.04em;
-  color: var(--panel);
-  background: var(--r-unique);
+  color: var(--ink-2);
+  background: var(--line-2);
   border-radius: 4px;
   padding: 3px 5px;
+  white-space: nowrap;
+}
+/* 巨型倉庫頁的類型標籤加重點色 */
+.tab-item .badge.badge-quad {
+  color: var(--panel);
+  background: var(--r-unique);
 }
 .tab-item.active .badge {
+  background: rgba(251, 250, 247, 0.22);
+  color: var(--panel);
+}
+.tab-item.active .badge.badge-quad {
   background: var(--panel);
   color: var(--ink);
 }
@@ -533,6 +546,8 @@ body {
 }
 .tab-item .tn {
   font: 600 12px/1 var(--sans);
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
