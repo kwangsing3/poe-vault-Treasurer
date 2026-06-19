@@ -135,6 +135,8 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 - `tradePrice.ts` — `getItemPrice`（物品走 `/api/trade/search` 兩段式：search → fetch）與
   `getCurrencyPrice`（通貨走 `/api/trade/exchange`，**暫未從 UI 使用**）。實測這些端點**公開、免登入**即可查。
   「有效價格」= 線上 + 即刻購買（`sale_type=priced`）+ 限定稀有度 → 同批掛單裡混沌石 / 神聖石**各別取代表價**。
+  **查價 `name` 須正規化**（剝除 `穢生 `／`mutated` 變體前綴、未鑑定/空名傳奇直接略過）否則回 `400`；
+  搜尋 request body ↔ 物品屬性的完整對照與修法見 [`TRADE-SEARCH-GUIDE.md`](./TRADE-SEARCH-GUIDE.md)。
   代表價邏輯抽在純模組 `priceStats.ts`（`robustMedian`）：依 >2× 跳幅把同幣別買斷價分成「價格層」，取最密集那層的中位數
   （平手取較便宜層），避開舊版「中位數±0.5x~2x」對雙峰偶數樣本的高估；測試見 `scripts/test-price-stats.mts`。
 - `rateLimiter.ts` — per-policy 的請求佇列：多窗口滑動、依回應 `x-rate-limit-*` 標頭自我校正、429 退避。
