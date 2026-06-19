@@ -30,7 +30,7 @@ export const settings: View = {
 
     return `
       <div class="page-head">
-        <span class="num">05</span><span class="ttl">設定 · 帳號連接</span>
+        <span class="ttl">設定 · 帳號連接</span>
         <span class="sub">官方 API 自動同步</span>
       </div>
       <div class="panel">

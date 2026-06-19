@@ -372,7 +372,7 @@ export const filter: View = {
     const multiGroup = computeGroups().length > 1;
     return `
       <div class="page-head">
-        <span class="num">06</span><span class="ttl">物品過濾器 · ITEM FILTER</span>
+        <span class="ttl">物品過濾器 · ITEM FILTER</span>
         <span class="sub">編輯規則 · 即時預覽 · 匯出 .filter</span>
       </div>
       <div class="filt-wrap">

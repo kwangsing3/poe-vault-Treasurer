@@ -282,11 +282,6 @@ body {
   margin-bottom: 26px;
   max-width: 1240px;
 }
-.page-head .num {
-  font-family: var(--serif);
-  font-size: 30px;
-  color: var(--muted);
-}
 .page-head .ttl {
   font-size: 19px;
   font-weight: 600;
@@ -773,43 +768,21 @@ body {
 }
 
 .plaque {
-  width: 300px;
+  width: 340px;
   border-left: 1.5px dashed var(--dash);
   padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   background: var(--panel-2);
+  overflow-y: auto;
+  max-height: 768px;
 }
 .plaque .art {
   height: 130px;
+  flex-shrink: 0;
 }
 
-/* ===================== detail ===================== */
-.detail {
-  display: flex;
-  min-height: 560px;
-}
-.detail-art {
-  width: 380px;
-  border-right: 1.5px dashed var(--dash);
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  background: var(--panel-2);
-}
-.detail-art .art {
-  flex: 1;
-  min-height: 220px;
-}
-.detail-data {
-  flex: 1;
-  padding: 24px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
 
 .mod-list,
 .price-list {

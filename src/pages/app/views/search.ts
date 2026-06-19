@@ -97,7 +97,7 @@ export const search: View = {
 
     return `
       <div class="page-head">
-        <span class="num">03</span><span class="ttl">搜尋與篩選</span>
+        <span class="ttl">搜尋與篩選</span>
         <span class="sub">在 ${STASH_ITEMS.length} 件裡精準定位</span>
       </div>
       <div class="panel">
@@ -161,7 +161,8 @@ export const search: View = {
         const it = STASH_ITEMS.find((x) => x.id === el.dataset['id']);
         if (!it) return;
         update((s) => (s.selectedItem = toSelected(it)));
-        navigate('detail');
+        navigate('overview'); // 詳情已併入總覽右側銘牌
+
       }),
     );
   },

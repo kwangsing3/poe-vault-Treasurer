@@ -3,7 +3,6 @@ import { loadUniquePrices, setPriceResolveHook } from './prices';
 import { scheduleSnapshots } from './networth';
 import { store, subscribe, update } from './store';
 import { overview } from './views/overview';
-import { detail } from './views/detail';
 import { search } from './views/search';
 import { report } from './views/report';
 import { settings } from './views/settings';
@@ -14,18 +13,17 @@ export interface View {
   mount?(root: HTMLElement): void;
 }
 
-export type Route = 'overview' | 'detail' | 'search' | 'report' | 'filter' | 'settings';
+export type Route = 'overview' | 'search' | 'report' | 'filter' | 'settings';
 
 const NAV: { route: Route; label: string }[] = [
   { route: 'overview', label: '總覽' },
-  { route: 'detail', label: '詳情' },
   { route: 'search', label: '搜尋' },
   { route: 'report', label: '報表' },
   { route: 'filter', label: '過濾器' },
   { route: 'settings', label: '設定' },
 ];
 
-const routes: Record<Route, View> = { overview, detail, search, report, filter, settings };
+const routes: Record<Route, View> = { overview, search, report, filter, settings };
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, '') as Route;

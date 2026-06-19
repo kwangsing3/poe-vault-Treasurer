@@ -68,9 +68,11 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 - `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈；`switchLeague` / `syncLeague` 換聯盟並重載 vault +
   背景估價；頂部「總資產」走 `formatStashTotal`。左上角**深色/淺色切換鈕**（`data-theme` 屬性 + localStorage
   持久化，色票以 CSS 變數覆寫）。
-- `views/` — `overview` / `detail` / `search` / `report` / `filter` / `settings` 六頁，各匯出 `View`
-  （`render(): string` + 選用 `mount(root)`）。`filter` 為物品過濾器頁：讀取/匯入 `.filter`、依
-  NeverSink `# [[NNNN]]` 標記分節折疊、搜尋、即時預覽、匯出。
+- `views/` — `overview` / `search` / `report` / `filter` / `settings` 五頁，各匯出 `View`
+  （`render(): string` + 選用 `mount(root)`）。
+  - `overview` 右側「銘牌」即**物品詳情面板**（已併入；點網格物品就地顯示詞綴 + 市場掛單 + 重新查價，
+    不再有獨立詳情頁籤）；傳奇掛單以「同一標價聚合、標出筆數」呈現。
+  - `filter` 為物品過濾器頁：讀取/匯入 `.filter`、依 NeverSink `# [[NNNN]]` 標記分節折疊、搜尋、即時預覽、匯出。
 
 慣例與重點：
 - **倉庫頁尺寸**：依分頁類型，`QuadStash` 為 24×24，其餘 12×12（見 `tabSize()`）。

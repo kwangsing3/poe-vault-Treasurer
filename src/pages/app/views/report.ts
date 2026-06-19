@@ -114,7 +114,7 @@ export const report: View = {
 
     return `
       <div class="page-head">
-        <span class="num">04</span><span class="ttl">清點彙總 · 總資產報表</span>
+        <span class="ttl">清點彙總 · 總資產報表</span>
         <span class="sub">僅計已估價資產 · 走勢每小時快照</span>
       </div>
       <div class="panel">

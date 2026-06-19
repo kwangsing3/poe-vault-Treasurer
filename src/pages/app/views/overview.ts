@@ -1,4 +1,4 @@
-import { RARITY_COLOR, RARITY_LABEL } from '../data';
+import { PRICE_ROWS, RARITY_COLOR, RARITY_LABEL } from '../data';
 import {
   STASH_ITEMS,
   STASH_TABS,
@@ -14,8 +14,10 @@ import {
   type StashLayout,
 } from '../stash';
 import { store, toSelected } from '../store';
-import { priceLinesHTML, priceStateFor, keyOf, setPriceResolveHook } from '../prices';
-import { navigate } from '../router';
+import {
+  priceLinesHTML, priceStateFor, keyOf, setPriceResolveHook,
+  formatPrice, formatListing, requestPrice,
+} from '../prices';
 import type { View } from '../router';
 
 const QUAD_CELL = 30; // px
@@ -209,43 +211,111 @@ function footerHTML(): string {
   return `${label} · ${items.length} 件 · 全庫 ${STASH_ITEMS.length} 件 · 估值合計 ${formatStashTotal(store.baseCurrency)}`;
 }
 
-/** 銘牌內層（不含 .plaque 外殼），供就地刷新而不重建外層元素。 */
+/** 銘牌內層（不含 .plaque 外殼），供就地刷新而不重建外層元素。
+ *  已整合原「物品詳情」頁內容：詞綴 + 市場掛單/比價 + 估值 + 重新查價。 */
 function plaqueInner(): string {
   const sel = store.selectedItem;
-  const color = sel ? RARITY_COLOR[sel.rarity] : '#cdc9c0';
-  const rarity = sel ? RARITY_LABEL[sel.rarity] : '—';
-  const sub = sel ? `${rarity} · ${sel.base ?? '—'}` : '—';
-  const art = sel?.icon
+  if (!sel) {
+    return `
+      <span class="kicker">選中物品 · 詳情</span>
+      <div class="art">ITEM ART</div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <span class="serif" style="font-size:21px;color:#cdc9c0;">未選擇</span>
+        <span class="kicker" style="letter-spacing:0.08em;">— · —</span>
+      </div>
+      <div class="divider"></div>
+      <span class="ink-2" style="font:500 13px/1.6 var(--sans);">點左側網格中的物品，這裡顯示詞綴與查價。</span>`;
+  }
+
+  const color = RARITY_COLOR[sel.rarity];
+  const rarity = RARITY_LABEL[sel.rarity];
+  const ilvlText = sel.ilvl ? ` · 物品等級 ${sel.ilvl}` : '';
+  const art = sel.icon
     ? `<div class="art has-img"><img src="${sel.icon}" alt="${sel.name}" /></div>`
     : `<div class="art">ITEM ART</div>`;
-  const priceLine =
-    sel && sel.value !== undefined
+  const valueText =
+    sel.value !== undefined
       ? sel.stack !== undefined
         ? `${formatChaos(sel.value)} / 個 · ×${sel.stack.toLocaleString('en-US')}`
         : formatChaos(sel.value)
       : '—';
-  // 市場價只對傳奇物品顯示（其餘無 trade 估價來源）。
-  const marketLine =
-    sel?.rarity === 'unique'
+
+  // 詞綴
+  const modList = sel.mods ?? [];
+  const mods = modList.length
+    ? modList
+        .map((m) => `<div class="mod-row"><span class="pip"></span><span style="font:500 13px/1 var(--sans);">${m}</span></div>`)
+        .join('')
+    : `<div class="mod-row"><span style="font:500 13px/1 var(--sans);color:var(--muted-2);">此物品無詞綴</span></div>`;
+
+  // 價格：傳奇顯示實際取樣到的掛單；其餘維持 mock 比價列。
+  const priceState = sel.rarity === 'unique' ? priceStateFor(sel.name, sel.base) : undefined;
+  const hasQuote = priceState !== undefined && priceState !== 'loading' && priceState !== 'unknown';
+  const priceTitle =
+    sel.rarity === 'unique'
+      ? `市場掛單${hasQuote ? ` · 取樣 ${priceState.listings.length} 筆` : ''}`
+      : '比價 · 多來源（mock）';
+  let prices: string;
+  if (hasQuote) {
+    // 同一標價聚合：把相同價格的掛單合併成一列，標出筆數（× N）。
+    const byPrice = new Map<string, number>();
+    for (const l of priceState.listings) {
+      const k = formatListing(l);
+      byPrice.set(k, (byPrice.get(k) ?? 0) + 1);
+    }
+    prices = [...byPrice.entries()]
+      .map(
+        ([price, n]) => `
+      <div class="price-row">
+        <span style="font:600 15px/1 var(--sans);">${price}</span>
+        <span class="ink-2" style="font:500 13px/1 var(--sans);">${n} 筆</span>
+      </div>`,
+      )
+      .join('');
+  } else if (sel.rarity === 'unique') {
+    prices = `<div class="price-row"><span class="ink-2" style="font:500 13px/1 var(--sans);">${formatPrice(priceState)}</span></div>`;
+  } else {
+    prices = PRICE_ROWS.map(
+      (p) => `
+      <div class="price-row">
+        <span class="ink-2" style="font:500 13px/1 var(--sans);">${p.src}</span>
+        <span style="font:600 15px/1 var(--sans);min-width:78px;text-align:right;">${p.price}</span>
+      </div>`,
+    ).join('');
+  }
+
+  const marketBlock =
+    sel.rarity === 'unique'
       ? `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
-        <span class="ink-2" style="font:500 12px/1 var(--sans);">市場價</span>
-        <span style="font:600 14px/1 var(--sans);text-align:right;">${priceLinesHTML(priceStateFor(sel.name, sel.base))}</span>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <span class="kicker">市場價（中位數）</span>
+          <div style="font:600 14px/1.35 var(--sans);">${priceLinesHTML(priceState)}</div>
+        </div>
+        <button class="btn" id="ov-reprice" style="height:30px;align-self:flex-start;">重新查價</button>
       </div>`
       : '';
+
   return `
-      <span class="kicker">選中物品 · 銘牌</span>
+      <span class="kicker">選中物品 · 詳情</span>
       ${art}
       <div style="display:flex;flex-direction:column;gap:5px;">
-        <span class="serif" style="font-size:21px;color:${color};">${sel?.name ?? '未選擇'}</span>
-        <span class="kicker" style="letter-spacing:0.08em;">${sub}</span>
+        <span class="serif" style="font-size:21px;color:${color};">${sel.name}</span>
+        <span class="kicker" style="letter-spacing:0.08em;">${rarity} · ${sel.base ?? '—'}${ilvlText}</span>
       </div>
       <div class="divider"></div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <span class="kicker">詞綴</span>
+        <div class="mod-list">${mods}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <span class="kicker">${priceTitle}</span>
+        <div class="price-list">${prices}</div>
+      </div>
       <div style="display:flex;align-items:baseline;justify-content:space-between;">
         <span class="ink-2" style="font:500 12px/1 var(--sans);">估值（mock）</span>
-        <span style="font:600 18px/1 var(--sans);">${priceLine}</span>
+        <span style="font:600 16px/1 var(--sans);">${valueText}</span>
       </div>
-      ${marketLine}
-      <button class="btn btn-dark" data-go="detail" style="margin-top:auto;">查價 / 加入擺攤 →</button>`;
+      ${marketBlock}`;
 }
 
 function plaque(): string {
@@ -265,7 +335,7 @@ export const overview: View = {
 
     return `
       <div class="page-head">
-        <span class="num">01</span><span class="ttl">倉庫總覽 · Stash 網格</span>
+        <span class="ttl">倉庫總覽 · Stash 網格</span>
         <span class="sub">一眼看清整庫存貨</span>
       </div>
       <div class="panel">
@@ -292,13 +362,19 @@ export const overview: View = {
     const footerEl = root.querySelector<HTMLElement>('#ov-footer');
     const plaqueEl = root.querySelector<HTMLElement>('#ov-plaque');
 
-    // 就地刷新銘牌（詳情按鈕在銘牌內，重繪後需重新綁定）。
+    // 就地刷新銘牌（重新查價按鈕在銘牌內，重繪後需重新綁定）。
     const refreshPlaque = () => {
       if (!plaqueEl) return;
       plaqueEl.innerHTML = plaqueInner();
-      plaqueEl
-        .querySelector<HTMLElement>('[data-go="detail"]')
-        ?.addEventListener('click', () => navigate('detail'));
+      const reprice = plaqueEl.querySelector<HTMLButtonElement>('#ov-reprice');
+      const sel = store.selectedItem;
+      if (reprice && sel) {
+        reprice.addEventListener('click', () => {
+          requestPrice(sel.name, sel.base);
+          reprice.textContent = '查價中…';
+          reprice.disabled = true;
+        });
+      }
     };
 
     const wireCells = () => {
