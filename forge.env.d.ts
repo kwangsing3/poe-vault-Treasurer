@@ -125,6 +125,7 @@ interface DebugApiCall {
   status: number;
   ok: boolean;
   ms: number;
+  rateLimit?: Record<string, string>;
 }
 interface DebugBridge {
   /** 是否為 debug 模式（環境變數 mode=debug）。 */

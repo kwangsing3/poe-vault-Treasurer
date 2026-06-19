@@ -10,6 +10,7 @@ import {
 } from "./api";
 import { login as authLogin, logout as authLogout, getStatus as authStatus } from "./api/oauth";
 import { SetRequestObserver } from "./utility/http.mod";
+import { logApiCall, resetApiLog, apiLogPath } from "./api/apiLog";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -70,9 +71,13 @@ const createWindow = () => {
     },
   });
 
-  // Debug 模式：把 http.mod 觀察到的每次請求送到此視窗的 renderer。
+  // Debug 模式：把 http.mod 觀察到的每次請求送到此視窗的 renderer，並把 trade 查價請求
+  // 追加到 price-queue.log（含 x-rate-limit-* 標頭）供事後分析限速問題。
   if (DEBUG) {
+    resetApiLog();
+    console.log(`[debug] 詢價佇列請求記錄：${apiLogPath()}`);
     SetRequestObserver((rec) => {
+      logApiCall(rec);
       if (!mainWindow.isDestroyed()) mainWindow.webContents.send("debug:api", rec);
     });
   }

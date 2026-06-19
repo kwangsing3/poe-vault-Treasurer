@@ -147,7 +147,7 @@ async function request<T>(
 // 由主進程選擇性註冊，把每次請求的 method/url(含 params)/body/狀態回報出去，
 // 供 debug 面板顯示。預設無觀察者 → 零額外負擔；觀察者拋錯不影響請求本身。
 
-/** 一次官方 API 請求的紀錄（供 debug 顯示）。 */
+/** 一次官方 API 請求的紀錄（供 debug 顯示 / 診斷記錄）。 */
 export interface ApiCallRecord {
   t: number; // 完成時間戳（ms）
   method: string;
@@ -156,6 +156,10 @@ export interface ApiCallRecord {
   status: number; // HTTP 狀態（網路層失敗為 0）
   ok: boolean; // 是否成功（2xx）
   ms: number; // 耗時（不含速率限制等待）
+  /** 回應的 x-rate-limit-* 與 retry-after 標頭（診斷限速用；無則省略）。 */
+  rateLimit?: Record<string, string>;
+  /** 非 2xx 時的錯誤訊息（含伺服器回應 body 摘要；成功時省略）。 */
+  detail?: string;
 }
 
 let observer: ((rec: ApiCallRecord) => void) | null = null;
@@ -168,6 +172,10 @@ export function SetRequestObserver(fn: ((rec: ApiCallRecord) => void) | null): v
 function notifyObserver(config: RequestConfig, result: Result<unknown>, ms: number): void {
   if (!observer) return;
   try {
+    const rateLimit: Record<string, string> = {};
+    for (const [k, v] of Object.entries(result.headers)) {
+      if (k.startsWith("x-rate-limit") || k === "retry-after") rateLimit[k] = v;
+    }
     observer({
       t: Date.now(),
       method: config.method,
@@ -176,6 +184,8 @@ function notifyObserver(config: RequestConfig, result: Result<unknown>, ms: numb
       status: result.status,
       ok: result.success,
       ms,
+      ...(Object.keys(rateLimit).length > 0 ? { rateLimit } : {}),
+      ...(result.success ? {} : { detail: result.error.slice(0, 400) }),
     });
   } catch {
     /* 觀察者錯誤不可影響請求流程 */
