@@ -52,9 +52,25 @@ function isFresh(d: PriceData): boolean {
   return Date.now() - d.fetchedAt < PRICE_TTL;
 }
 
-/** 以名稱 + 基底為 key。 */
+// 顯示層的聯盟機制名稱前綴（trade 不認得，查價前須剝除）。目前已知：穢生（Foulborn，對應 mutated:true）。
+// 完整說明見 TRADE-SEARCH-GUIDE.md。
+const VARIANT_NAME_PREFIX = /^穢生\s+/;
+
+/** 以名稱 + 基底為 key。名稱會剝除變體前綴，使穢生變體與基底傳奇共用同一估價。 */
 export function keyOf(name: string, base: string | undefined): string {
-  return `${name}|${base ?? ''}`;
+  return `${name.replace(VARIANT_NAME_PREFIX, '').trim()}|${base ?? ''}`;
+}
+
+/**
+ * 估價查詢用的傳奇名稱：剝除聯盟機制顯示前綴（穢生…）。
+ * 空名、或「名稱即基底」（未鑑定 / 無名傳奇）回 null —— 代表無法以名稱查價、呼叫端應略過，
+ * 絕不可把基底名當傳奇名送出（會被 trade 判 400 Invalid query）。見 TRADE-SEARCH-GUIDE.md。
+ */
+export function priceQueryName(name: string, base: string | undefined): string | null {
+  const n = name.replace(VARIANT_NAME_PREFIX, '').trim();
+  if (!n) return null;
+  if (base !== undefined && n === base) return null;
+  return n;
 }
 export function priceKey(it: StashItem): string {
   return keyOf(it.name, it.base);
@@ -157,6 +173,7 @@ export function loadUniquePrices(league: string): void {
   const expired: { it: StashItem; fetchedAt: number }[] = [];
   for (const it of STASH_ITEMS) {
     if (it.rarity !== 'unique') continue; // 只估傳奇；通貨等之後再處理
+    if (priceQueryName(it.name, it.base) === null) continue; // 未鑑定 / 無名變體：無法查名，略過（見 TRADE-SEARCH-GUIDE.md）
     const key = priceKey(it);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -171,14 +188,17 @@ export function loadUniquePrices(league: string): void {
   // 過期者依上次查價時間由舊到新（最久未更新的排前面）。
   expired.sort((a, b) => a.fetchedAt - b.fetchedAt);
 
-  for (const it of noPrice) enqueue(it.name, it.base, false);
-  for (const e of expired) enqueue(e.it.name, e.it.base, false);
+  // enqueue 用「正規化後的查詢名」（已在上方過濾掉 null 者）。
+  for (const it of noPrice) enqueue(priceQueryName(it.name, it.base)!, it.base, false);
+  for (const e of expired) enqueue(priceQueryName(e.it.name, e.it.base)!, e.it.base, false);
   kick();
 }
 
 /** 使用者主動查價：插到佇列最前、立即啟動 worker（即使已有新鮮價也重查並覆蓋）。 */
 export function requestPrice(name: string, base: string | undefined): void {
-  enqueue(name, base ?? '', true);
+  const qn = priceQueryName(name, base);
+  if (qn === null) return; // 無法以名稱查價（未鑑定 / 無名變體）
+  enqueue(qn, base ?? '', true);
   kick();
 }
 
