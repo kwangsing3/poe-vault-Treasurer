@@ -143,8 +143,8 @@ async function worker(): Promise<void> {
 
 /**
  * 載入並背景估價當前聯盟的傳奇物品。
- * 先用 localStorage 既有價格填滿快取（開啟即有資料、不空白），
- * 再把「沒有」或「已過期」的排入佇列；新價格寫回 localStorage。
+ * 先用 localStorage 既有價格填滿快取（開啟即有資料、不空白），再把需要查價的排入佇列：
+ * 「尚無估價」者優先，其後接「已過期」者（依上次查價時間由舊到新）。新價格寫回 localStorage。
  */
 export function loadUniquePrices(league: string): void {
   activeRun++; // 作廢前一聯盟進行中的結果
@@ -156,17 +156,30 @@ export function loadUniquePrices(league: string): void {
   cache.clear();
   for (const [key, data] of Object.entries(persisted[league] ?? {})) cache.set(key, data);
 
-  // 排入需要查價的傳奇：尚無價格、或既有價格已過期。
+  // 排入需要查價的傳奇，並排定優先序：
+  //   1) 尚無估價（從未查過）的優先查；
+  //   2) 已過期的排在後面，依「上次查價時間」由舊到新（最久沒更新的先補）。
   const seen = new Set<string>();
+  const noPrice: StashItem[] = [];
+  const expired: { it: StashItem; fetchedAt: number }[] = [];
   for (const it of STASH_ITEMS) {
     if (it.rarity !== 'unique') continue; // 只估傳奇；通貨等之後再處理
     const key = priceKey(it);
     if (seen.has(key)) continue;
     seen.add(key);
     const cached = cache.get(key);
-    const fresh = cached !== undefined && cached !== 'loading' && cached !== 'unknown' && isFresh(cached);
-    if (!fresh) enqueue(it.name, it.base, false);
+    if (cached === undefined || cached === 'unknown') {
+      noPrice.push(it); // 尚無估價
+    } else if (cached !== 'loading' && !isFresh(cached)) {
+      expired.push({ it, fetchedAt: cached.fetchedAt }); // 有舊價但已過期
+    }
+    // 仍新鮮或查價中 → 不重排
   }
+  // 過期者依上次查價時間由舊到新（最久未更新的排前面）。
+  expired.sort((a, b) => a.fetchedAt - b.fetchedAt);
+
+  for (const it of noPrice) enqueue(it.name, it.base, false);
+  for (const e of expired) enqueue(e.it.name, e.it.base, false);
   kick();
 }
 
