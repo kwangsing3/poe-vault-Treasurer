@@ -3,7 +3,8 @@
 //   - getCurrencyPrice：通貨 → /api/trade/exchange（want/have）※ 目前暫不從 renderer 使用，保留供日後
 // 通貨「絕對不要」走 getItemPrice 的搜尋佇列——兩者限制與查法都不同，務必分開處理。
 //
-// 為「有效價格」：取線上最便宜的前 N 筆 → 以「主流幣別」（樣本中筆數最多的幣別）為準 →
+// 為「有效價格」：物品（getItemPrice）納入「該次 search 回傳的全部結果」（分批 fetch 後彙總，
+// 不再限制前 10 筆）；通貨（getCurrencyPrice/exchange）仍取前 N 筆。皆以「主流幣別」分別
 // 去離群（丟掉 < 中位數 50% 或 > 200% 的雜訊單，如手滑掛錯 / 惡意壓價）→ 取中位數。
 // 不做跨幣別換算（通貨兌換比之後再處理）。
 //
@@ -32,7 +33,7 @@ const exchangeLimiter = new RateLimiter([
   { hits: 30, period: 300 },
 ]);
 
-const SAMPLE = 10; // 取線上最便宜的前 N 筆做樣本
+const SAMPLE = 10; // 通貨 exchange 取線上最便宜的前 N 筆做樣本（物品 search 已改為全量）
 
 /** 單筆掛單（原始幣別）。供詳情頁列表顯示。 */
 export interface PriceListing {
@@ -154,17 +155,22 @@ export async function getItemPrice(
   );
   if (!search.success || !search.data.result?.length) return null;
 
-  const ids = search.data.result.slice(0, SAMPLE);
-  const fetched = await fetchLimiter.run<FetchResponse>(() =>
-    GET(SEARCH_ENDPOINTS.fetch(ids, search.data.id), { headers }),
-  );
-  if (!fetched.success) return null;
-
+  // 納入「這一次 search 回傳的全部結果」（不再只取前 10 筆）。
+  // fetch 端點每次上限 10 個 id，故把結果清單分批、逐批取明細後彙總；
+  // 每批都過 fetchLimiter（多批時會自動排隊/退避以守住 rate limit）。
+  const ids = search.data.result;
   const listings: PriceListing[] = [];
-  for (const r of fetched.data.result ?? []) {
-    const p = r.listing?.price;
-    if (!p || p.amount === undefined || !p.currency) continue;
-    listings.push({ amount: p.amount, currency: p.currency });
+  for (let i = 0; i < ids.length; i += 10) {
+    const chunk = ids.slice(i, i + 10);
+    const fetched = await fetchLimiter.run<FetchResponse>(() =>
+      GET(SEARCH_ENDPOINTS.fetch(chunk, search.data.id), { headers }),
+    );
+    if (!fetched.success) break; // 某批失敗就停，已取得的仍計入估價
+    for (const r of fetched.data.result ?? []) {
+      const p = r.listing?.price;
+      if (!p || p.amount === undefined || !p.currency) continue;
+      listings.push({ amount: p.amount, currency: p.currency });
+    }
   }
   return quoteFrom(listings);
 }
