@@ -20,6 +20,7 @@ import {
 } from '../prices';
 import { loadBlocks, type FilterBlock, type Style } from '../filter';
 import { matchItem } from '../filterApply';
+import { esc } from '../html';
 import type { View } from '../router';
 
 // 套用物品過濾器時，當前生效的規則（進入總覽頁 / 勾選時載入；避免每次重繪都重讀 localStorage）。
@@ -139,10 +140,10 @@ function layoutHTML(tab: number, layout: StashLayout): string {
 
   // 整體位移到左上、容器收緊到內容範圍，避免右下大片空白。
   const cells = filled.map((c) => {
-    const inner = `<img src="${c.it.icon}" alt="${c.it.name}" loading="lazy" />${c.it.stack !== undefined ? `<span class="stack">${c.it.stack}</span>` : ''}`;
+    const inner = `<img src="${esc(c.it.icon)}" alt="${esc(c.it.name)}" loading="lazy" />${c.it.stack !== undefined ? `<span class="stack">${c.it.stack}</span>` : ''}`;
     const sel = c.it.name === selName ? ' sel' : '';
     const ov = filterOverlay(c.it);
-    return `<div class="lay-slot${sel} ${ov.cls}" data-id="${c.it.id}" title="${c.it.name}" style="left:${(c.x - minX).toFixed(1)}px;top:${(c.y - minY).toFixed(1)}px;width:${c.w.toFixed(1)}px;height:${c.h.toFixed(1)}px;${ov.style}"><div class="lay-frame"></div>${inner}</div>`;
+    return `<div class="lay-slot${sel} ${ov.cls}" data-id="${esc(c.it.id)}" title="${esc(c.it.name)}" style="left:${(c.x - minX).toFixed(1)}px;top:${(c.y - minY).toFixed(1)}px;width:${c.w.toFixed(1)}px;height:${c.h.toFixed(1)}px;${ov.style}"><div class="lay-frame"></div>${inner}</div>`;
   });
 
   const pills =
@@ -169,8 +170,8 @@ function itemHTML(it: StashItem, positioned: boolean): string {
     : '';
   const stack = it.stack !== undefined ? `<span class="stack">${it.stack}</span>` : '';
   const ov = filterOverlay(it);
-  return `<div class="gitem ${sel} ${ov.cls}" style="${pos}--rc:${RARITY_COLOR[it.rarity]};${ov.style}" data-id="${it.id}" data-rarity="${it.rarity}" title="${it.name}">
-    <img src="${it.icon}" alt="${it.name}" loading="lazy" />${stack}
+  return `<div class="gitem ${sel} ${ov.cls}" style="${pos}--rc:${RARITY_COLOR[it.rarity]};${ov.style}" data-id="${esc(it.id)}" data-rarity="${it.rarity}" title="${esc(it.name)}">
+    <img src="${esc(it.icon)}" alt="${esc(it.name)}" loading="lazy" />${stack}
   </div>`;
 }
 
@@ -230,7 +231,7 @@ function gridHTML(): string {
 function footerHTML(): string {
   if (isSearching()) {
     const found = searchItems(store.searchQuery);
-    return `符合「${store.searchQuery.trim()}」· ${found.length} 件 · 全庫 ${STASH_ITEMS.length} 件 · 估值合計 ${formatStashTotal(store.baseCurrency)}`;
+    return `符合「${esc(store.searchQuery.trim())}」· ${found.length} 件 · 全庫 ${STASH_ITEMS.length} 件 · 估值合計 ${formatStashTotal(store.baseCurrency)}`;
   }
   const t = STASH_TABS.find((x) => x.i === store.activeTab);
   const items = tabItems(store.activeTab);
@@ -267,7 +268,7 @@ function plaqueInner(): string {
   const rarity = RARITY_LABEL[sel.rarity];
   const ilvlText = sel.ilvl ? ` · 物品等級 ${sel.ilvl}` : '';
   const art = sel.icon
-    ? `<div class="art has-img"><img src="${sel.icon}" alt="${sel.name}" /></div>`
+    ? `<div class="art has-img"><img src="${esc(sel.icon)}" alt="${esc(sel.name)}" /></div>`
     : `<div class="art">ITEM ART</div>`;
   const valueText =
     sel.value !== undefined
@@ -280,7 +281,7 @@ function plaqueInner(): string {
   const modList = sel.mods ?? [];
   const mods = modList.length
     ? modList
-        .map((m) => `<div class="mod-row"><span class="pip"></span><span style="font:500 13px/1 var(--sans);">${m}</span></div>`)
+        .map((m) => `<div class="mod-row"><span class="pip"></span><span style="font:500 13px/1 var(--sans);">${esc(m)}</span></div>`)
         .join('')
     : `<div class="mod-row"><span style="font:500 13px/1 var(--sans);color:var(--muted-2);">此物品無詞綴</span></div>`;
 
@@ -334,14 +335,15 @@ function plaqueInner(): string {
       : '';
 
   // 名稱顯示：套用過濾器時，依命中規則以「掉落標籤」樣式呈現（Hide 則標註）。
-  let nameHtml = `<span class="serif" style="font-size:21px;color:${color};">${sel.name}</span>`;
+  const nameEsc = esc(sel.name);
+  let nameHtml = `<span class="serif" style="font-size:21px;color:${color};">${nameEsc}</span>`;
   if (store.filterApplied) {
     const full = STASH_ITEMS.find((x) => x.name === sel.name && (sel.base === undefined || x.base === sel.base));
     const m = full ? matchItem(full, appliedBlocks) : null;
     if (m && m.action !== 'Hide') {
-      nameHtml = `<span class="filt-droplabel" style="${dropLabelStyle(m.style)}">${sel.name}</span>`;
+      nameHtml = `<span class="filt-droplabel" style="${dropLabelStyle(m.style)}">${nameEsc}</span>`;
     } else if (m && m.action === 'Hide') {
-      nameHtml = `<span class="serif" style="font-size:21px;color:${color};opacity:0.4;">${sel.name}</span> <span class="kicker">（過濾器隱藏）</span>`;
+      nameHtml = `<span class="serif" style="font-size:21px;color:${color};opacity:0.4;">${nameEsc}</span> <span class="kicker">（過濾器隱藏）</span>`;
     }
   }
 
@@ -350,7 +352,7 @@ function plaqueInner(): string {
       ${art}
       <div style="display:flex;flex-direction:column;gap:5px;">
         ${nameHtml}
-        <span class="kicker" style="letter-spacing:0.08em;">${rarity} · ${sel.base ?? '—'}${ilvlText}</span>
+        <span class="kicker" style="letter-spacing:0.08em;">${rarity} · ${esc(sel.base ?? '—')}${ilvlText}</span>
       </div>
       <div class="divider"></div>
       <div style="display:flex;flex-direction:column;gap:8px;">

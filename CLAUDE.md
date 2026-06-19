@@ -48,6 +48,8 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 - `theme.css` — 設計系統（色票 / 字體 / 卡片 / 各頁樣式）
 - `data.ts` — 共用設計常數：稀有度色票/標籤、基準通貨換算率（`CURRENCY_META`），及少量線框遺留 mock（`PRICE_ROWS`）。
 - `format.ts` — 共用格式化工具（`num` 數值精簡、`relativeTime` 相對時間）；供多個 view / 模組共用，避免各自重複實作。
+- `html.ts` — `esc()` HTML 跳脫工具。**view 以 template string 拼 HTML，任何「使用者輸入 / 伺服器資料」插值前一律經 `esc()`**
+  （物品名/詞綴/base、搜尋字串、過濾器規則名/條件值/匯入訊息、聯盟/帳號名等），避免破壞標籤或注入；測試見 `scripts/test-html-esc.mts`。
 - `stash.ts` — 倉庫資料與**以聯盟為 key 的 vault**。`STASH_TABS`(36 頁固定中繼) +
   `STASH_ITEMS`（**當前聯盟**的物品，live binding）。`loadLeagueVault(league)` 啟動 / 切聯盟時
   透過 `window.poe.getStash(tabIndex, league)` 逐頁載入並快取；`isGridTab()` 區分 2D 網格分頁

@@ -1,6 +1,7 @@
 import { RARITY_COLOR, RARITY_LABEL, type Rarity } from '../data';
 import { STASH_ITEMS, formatChaos, searchItems, type StashItem } from '../stash';
 import { store, toSelected, update } from '../store';
+import { esc } from '../html';
 import { navigate } from '../router';
 import type { View } from '../router';
 
@@ -77,10 +78,10 @@ export const search: View = {
     const rows = shown
       .map(
         (it) => `
-      <div class="result-row" data-id="${it.id}">
+      <div class="result-row" data-id="${esc(it.id)}">
         <div style="flex:1;display:flex;align-items:center;gap:11px;">
-          <img class="ico" src="${it.icon}" alt="${it.name}" loading="lazy" style="object-fit:contain;background:transparent;" />
-          <span style="font:500 13px/1 var(--sans);">${it.name}${it.stack !== undefined ? ` <span style="color:var(--muted-2);">×${it.stack}</span>` : ''}</span>
+          <img class="ico" src="${esc(it.icon)}" alt="${esc(it.name)}" loading="lazy" style="object-fit:contain;background:transparent;" />
+          <span style="font:500 13px/1 var(--sans);">${esc(it.name)}${it.stack !== undefined ? ` <span style="color:var(--muted-2);">×${it.stack}</span>` : ''}</span>
         </div>
         <span style="width:90px;font:500 12px/1 var(--sans);color:var(--muted-2);">${RARITY_LABEL[it.rarity]}</span>
         <span style="width:90px;text-align:right;font:600 14px/1 var(--sans);">${formatChaos(it.value)}</span>

@@ -21,6 +21,7 @@ import {
   emptyBlock,
   tokenizeValues,
 } from "../filter";
+import { esc } from "../html";
 import baseZhRaw from "../base-zh.json";
 
 // 英文 base/通貨 → 繁中（顯示層；由 scripts/build-base-zh.mjs 從 name-map 萃取）。
@@ -239,6 +240,7 @@ function condSummary(b: FilterBlock): string {
   });
   let txt = parts.join(" · ");
   if (txt.length > 140) txt = txt.slice(0, 140) + "…";
+  txt = esc(txt); // parts 含使用者輸入的條件值；extra 為本地產生的計數 HTML，不跳脫
   return extra ? `${txt} · ${extra}` : txt;
 }
 
@@ -315,7 +317,7 @@ function listHtml(): string {
     out.push(`
       <div class="filt-sec-hd ${isOpen ? "open" : ""}" data-sec="${gi}">
         <span class="filt-sec-arrow">${isOpen ? "▾" : "▸"}</span>
-        <span class="filt-sec-name">${g.name}</span>
+        <span class="filt-sec-name">${esc(g.name)}</span>
         <span class="filt-sec-cnt">${cnt}</span>
       </div>`);
     if (isOpen) out.push(...matched.map((it) => blockCard(it.b, it.i)));
@@ -340,7 +342,7 @@ function importPanel(): string {
         <button class="btn" id="imp-cancel">取消</button>
         <button class="btn btn-dark" id="imp-parse">解析並載入</button>
       </div>
-      ${importMsg ? `<div class="filt-import-msg">${importMsg}</div>` : ""}
+      ${importMsg ? `<div class="filt-import-msg">${esc(importMsg)}</div>` : ""}
     </div>`;
 }
 
@@ -351,7 +353,7 @@ function blockCard(b: FilterBlock, i: number): string {
   const actCls = b.action === "Show" ? "show" : "hide";
   const actZh =
     b.action === "Show" ? "顯示" : b.action === "Hide" ? "隱藏" : "精簡";
-  const title = cardTitle(b);
+  const title = esc(cardTitle(b));
   return `
     <div class="filt-card ${sel} ${off}" data-pick="${b.id}">
       <div class="filt-card-top">
@@ -392,7 +394,7 @@ function condRow(c: Condition, idx: number): string {
         `<option value="${r}" ${r === c.value ? "selected" : ""}>${RARITY_ZH[r]}</option>`,
     ).join("")}</select>`;
   } else {
-    valInput = `<input class="filt-in" data-cond="val" data-idx="${idx}" value="${(c.value || "").replace(/"/g, "&quot;")}" placeholder="值（字串請加引號）" />`;
+    valInput = `<input class="filt-in" data-cond="val" data-idx="${idx}" value="${esc(c.value)}" placeholder="值（字串請加引號）" />`;
   }
   return `
     <div class="filt-cond">
@@ -438,7 +440,7 @@ function editor(b: FilterBlock): string {
   return `
     <div class="filt-ed">
       <div class="filt-ed-head">
-        <input class="filt-in grow" id="ed-name" value="${(b.name || "").replace(/"/g, "&quot;")}" placeholder="規則名稱" />
+        <input class="filt-in grow" id="ed-name" value="${esc(b.name)}" placeholder="規則名稱" />
         <div class="filt-seg">
           <div class="opt ${b.action === "Show" ? "on" : ""}" data-action="Show">顯示</div>
           <div class="opt ${b.action === "Hide" ? "on" : ""}" data-action="Hide">隱藏</div>
@@ -451,7 +453,7 @@ function editor(b: FilterBlock): string {
         b.unknown?.length
           ? `
       <div class="filt-sec-ttl">進階（保留原樣 · 唯讀）</div>
-      <pre class="filt-passthrough">${b.unknown.map((u) => u.replace(/</g, "&lt;")).join("\n")}</pre>`
+      <pre class="filt-passthrough">${b.unknown.map((u) => esc(u)).join("\n")}</pre>`
           : ""
       }
 
@@ -516,12 +518,12 @@ export const filter: View = {
             </div>
           </div>
           ${importOpen ? importPanel() : ""}
-          ${importMsg && !importOpen ? `<div class="filt-import-msg banner">${importMsg}</div>` : ""}
+          ${importMsg && !importOpen ? `<div class="filt-import-msg banner">${esc(importMsg)}</div>` : ""}
           ${
             BLOCKS.length
               ? `
           <div class="filt-search-row">
-            <input class="filt-search" id="filt-search" type="search" placeholder="搜尋規則 / 基底 / 類別…" value="${query.replace(/"/g, "&quot;")}" />
+            <input class="filt-search" id="filt-search" type="search" placeholder="搜尋規則 / 基底 / 類別…" value="${esc(query)}" />
             ${multiGroup ? `<button class="filt-add" id="sec-toggle-all" title="全部展開 / 收合">${collapsed.size ? "全展開" : "全收合"}</button>` : ""}
           </div>`
               : ""
@@ -543,7 +545,7 @@ export const filter: View = {
                 <button class="btn btn-dark" id="dl-out">下載</button>
               </div>
             </div>
-            <textarea class="filt-out" id="filt-out" spellcheck="false" placeholder="在此貼上或編輯 .filter 原始碼…">${serializeCurrent().replace(/</g, "&lt;")}</textarea>
+            <textarea class="filt-out" id="filt-out" spellcheck="false" placeholder="在此貼上或編輯 .filter 原始碼…">${esc(serializeCurrent())}</textarea>
           </div>
         </div>
       </div>`;

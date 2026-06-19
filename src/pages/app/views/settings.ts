@@ -1,6 +1,7 @@
 import type { BaseCurrency } from '../data';
 import { STASH_ITEMS, STASH_TABS } from '../stash';
 import { relativeTime } from '../format';
+import { esc } from '../html';
 import { store, update } from '../store';
 import { switchLeague, syncLeague } from '../router';
 import type { View } from '../router';
@@ -34,7 +35,7 @@ export const settings: View = {
             <div class="avatar"></div>
             <div style="display:flex;flex-direction:column;gap:4px;">
               <span style="font:600 14px/1 var(--sans);">${
-                store.authConnected ? `PoE 帳號 · ${store.account ?? '已連結'}` : 'PoE 帳號 · 未連結'
+                store.authConnected ? `PoE 帳號 · ${esc(store.account ?? '已連結')}` : 'PoE 帳號 · 未連結'
               }</span>
               <span class="${store.authConnected ? 'pos' : 'ink-2'}" style="display:flex;align-items:center;gap:7px;font:500 12px/1 var(--sans);">
                 <span style="width:8px;height:8px;border-radius:50%;background:${store.authConnected ? 'var(--pos)' : 'var(--muted)'};"></span>${
@@ -54,7 +55,7 @@ export const settings: View = {
             <div class="field">
               <span class="label">聯盟</span>
               <select id="set-league" class="select">
-                ${store.leagues.map((l) => `<option value="${l}" ${l === store.league ? 'selected' : ''}>${l}</option>`).join('')}
+                ${store.leagues.map((l) => `<option value="${esc(l)}" ${l === store.league ? 'selected' : ''}>${esc(l)}</option>`).join('')}
               </select>
             </div>
             <div class="field">

@@ -1,6 +1,7 @@
 import { formatStashTotal, loadLeagueVault } from './stash';
 import { loadUniquePrices, setPriceResolveHook } from './prices';
 import { scheduleSnapshots } from './networth';
+import { esc } from './html';
 import { store, subscribe, update } from './store';
 import { overview } from './views/overview';
 import { search } from './views/search';
@@ -77,7 +78,7 @@ function topbar(route: Route): string {
   ).join('');
 
   const leagueOpts = store.leagues
-    .map((l) => `<option value="${l}" ${l === store.league ? 'selected' : ''}>${l}</option>`)
+    .map((l) => `<option value="${esc(l)}" ${l === store.league ? 'selected' : ''}>${esc(l)}</option>`)
     .join('');
 
   return `
