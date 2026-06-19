@@ -27,7 +27,7 @@ const routes: Record<Route, View> = { overview, search, report, filter, settings
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, '') as Route;
-  return hash in routes ? hash : 'filter';
+  return hash in routes ? hash : 'overview';
 }
 
 /** 切換頁面：只改 hash，實際重繪交給 hashchange */
@@ -203,7 +203,7 @@ export function start(root: HTMLElement): void {
     const btn = app.querySelector<HTMLElement>('[data-win="max"]');
     if (btn) btn.innerHTML = m ? ICON_RESTORE : ICON_MAX;
   });
-  if (!location.hash) location.hash = '#/filter';
+  if (!location.hash) location.hash = '#/overview';
   render();
   void loadAuthStatus();
   void loadLeagues();
