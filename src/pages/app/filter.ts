@@ -292,41 +292,7 @@ export function emptyBlock(action: BlockAction = 'Show'): FilterBlock {
   return { id: newId(), name: '新規則', action, enabled: true, conditions: [], style: {} };
 }
 
-/** 預設示範規則（讓頁面一打開就有可看的內容）。值用英文，全平台相容。 */
-function defaultBlocks(): FilterBlock[] {
-  return [
-    {
-      id: newId(), name: '頂級通貨', action: 'Show', enabled: true,
-      conditions: [
-        { field: 'Class', op: '', value: '"Currency"' },
-        { field: 'BaseType', op: '', value: '"Mirror of Kalandra" "Divine Orb"' },
-      ],
-      style: {
-        textColor: [255, 255, 255], borderColor: [200, 0, 0], bgColor: [120, 0, 0],
-        fontSize: 45, minimapIcon: { size: 0, color: 'White', shape: 'Diamond' }, beam: { color: 'White', temp: false },
-      },
-    },
-    {
-      id: newId(), name: '高物品等級稀有', action: 'Show', enabled: true,
-      conditions: [
-        { field: 'Rarity', op: '', value: 'Rare' },
-        { field: 'ItemLevel', op: '>=', value: '84' },
-      ],
-      style: { textColor: [255, 255, 119], borderColor: [255, 255, 119], fontSize: 38 },
-    },
-    {
-      id: newId(), name: '六連', action: 'Show', enabled: true,
-      conditions: [{ field: 'LinkedSockets', op: '>=', value: '6' }],
-      style: { borderColor: [255, 0, 0], fontSize: 40, minimapIcon: { size: 1, color: 'Red', shape: 'Star' } },
-    },
-    {
-      id: newId(), name: '隱藏普通/魔法', action: 'Hide', enabled: true,
-      conditions: [{ field: 'Rarity', op: '<=', value: 'Magic' }],
-      style: {},
-    },
-  ];
-}
-
+/** 載入已存規則；沒有存檔則回空陣列（不預載示範/測試資料，由使用者新增或讀取）。 */
 export function loadBlocks(): FilterBlock[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -335,9 +301,9 @@ export function loadBlocks(): FilterBlock[] {
       if (Array.isArray(parsed) && parsed.length) return parsed;
     }
   } catch {
-    /* 損毀則回退預設 */
+    /* 損毀則回空 */
   }
-  return defaultBlocks();
+  return [];
 }
 
 export function saveBlocks(blocks: FilterBlock[]): void {
