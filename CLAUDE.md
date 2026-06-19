@@ -65,14 +65,21 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
   原樣吐回（無損 round-trip，見 `scripts/test-filter-roundtrip.mts` / `inspect-neversink.mts`）。
 - `base-zh.json` — 英文 base/通貨 → 繁中對照（顯示層用），由 `scripts/build-base-zh.mjs` 從 `data/name-map/`
   萃取；filter 頁把規則的英文 `BaseType` 顯示成中文。
+- `filterApply.ts` + `base-meta.json` — **倉庫頁套用過濾器**的評估引擎。`matchItem(item, blocks)` 由上而下
+  first-match-wins（支援 `Continue` 疊樣式），同時比對結構化條件與 `unknown[]` 進階條件；不支援的條件保守
+  跳過該區塊。`base-meta.json`（`scripts/build-base-meta.mjs` 從 poedb-dict + currency 萃取）提供繁中 base →
+  `{en, class}`，解決 BaseType 語言與 `Class` 兩個缺口（對倉庫物品約 90% class 命中）。
 - `router.ts` — hash 路由 + 頂部導覽 + 重繪迴圈；`switchLeague` / `syncLeague` 換聯盟並重載 vault +
   背景估價；頂部「總資產」走 `formatStashTotal`。左上角**深色/淺色切換鈕**（`data-theme` 屬性 + localStorage
   持久化，色票以 CSS 變數覆寫）。
 - `views/` — `overview` / `search` / `report` / `filter` / `settings` 五頁，各匯出 `View`
   （`render(): string` + 選用 `mount(root)`）。
   - `overview` 右側「銘牌」即**物品詳情面板**（已併入；點網格物品就地顯示詞綴 + 市場掛單 + 重新查價，
-    不再有獨立詳情頁籤）；傳奇掛單以「同一標價聚合、標出筆數」呈現。
-  - `filter` 為物品過濾器頁：讀取/匯入 `.filter`、依 NeverSink `# [[NNNN]]` 標記分節折疊、搜尋、即時預覽、匯出。
+    不再有獨立詳情頁籤）；傳奇掛單以「同一標價聚合、標出筆數」呈現。搜尋列旁有**「套用過濾器」checkbox**
+    （`store.filterApplied`）：勾選時用 `filterApply.matchItem` 對倉庫物品做顯示層覆蓋（Show 上色/邊框、Hide 淡化），
+    銘牌名稱亦以命中規則的「掉落標籤」樣式呈現。純 app 內預覽、與遊戲無關。
+  - `filter` 為物品過濾器頁：讀取/匯入 `.filter`、依 NeverSink `# [[NNNN]]` 標記分節折疊、搜尋、即時預覽、匯出；
+    「原始碼 · .filter」面板**可直接編輯**，離開欄位即反解析回規則（雙向同步）。不預載示範規則。
 
 慣例與重點：
 - **倉庫頁尺寸**：依分頁類型，`QuadStash` 為 24×24，其餘 12×12（見 `tabSize()`）。

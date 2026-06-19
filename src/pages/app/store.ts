@@ -57,6 +57,8 @@ export interface AppState {
   authConnected: boolean;
   /** 已連結的帳號名（未連結為 null） */
   account: string | null;
+  /** 倉庫頁是否套用物品過濾器的顯示層效果（高亮/淡化；與遊戲無關） */
+  filterApplied: boolean;
 }
 
 /** 聯盟清單的離線後備（抓取失敗時使用） */
@@ -77,6 +79,7 @@ export const store: AppState = {
   trendRange: '7d',
   authConnected: false,
   account: null,
+  filterApplied: false,
 };
 
 /** 訂閱者：狀態變更後要重繪的回呼（由 router 註冊） */

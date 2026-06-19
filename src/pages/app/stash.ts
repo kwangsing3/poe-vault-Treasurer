@@ -27,6 +27,17 @@ export interface StashItem {
   x: number; y: number; w: number; h: number; // 網格分頁＝格座標；特殊分頁＝x 為 slot 索引
   ilvl?: number; // 物品等級（真實）
   mods?: string[]; // 詞綴（implicit + explicit，真實）
+  // ── 套用物品過濾器用（從原始回應帶回；無對應欄位則 undefined）──────────────
+  socketColors?: string[]; // 各插槽顏色（R/G/B/W/A/D）；長度＝插槽數
+  links?: number; // 最大連線群大小
+  quality?: number; // 品質 %
+  corrupted?: boolean;
+  identified?: boolean;
+  mirrored?: boolean; // = 原始 duplicated
+  fractured?: boolean;
+  synthesised?: boolean;
+  replica?: boolean;
+  influences?: string[]; // Shaper / Elder / Crusader / Hunter / Redeemer / Warlord
 }
 
 // 特殊分頁（通貨/碎片/精華…）的固定版面：回應內附的 *Layout 物件。
@@ -177,6 +188,42 @@ function rawToStashItem(raw: PoeStashItem, tab: number, idx: number): StashItem 
   if (raw.ilvl !== undefined && raw.ilvl > 0) item.ilvl = raw.ilvl;
   const mods = [...(raw.implicitMods ?? []), ...(raw.explicitMods ?? [])];
   if (mods.length > 0) item.mods = mods;
+
+  // ── 套用過濾器需要的屬性（原始回應有、先前投影剃掉的）──────────────────────
+  const sockets = raw['sockets'] as { group: number; sColour?: string }[] | undefined;
+  if (Array.isArray(sockets) && sockets.length > 0) {
+    item.socketColors = sockets.map((s) => s.sColour ?? '?');
+    const groups = new Map<number, number>();
+    for (const s of sockets) groups.set(s.group, (groups.get(s.group) ?? 0) + 1);
+    item.links = Math.max(...groups.values());
+  }
+  if (raw['corrupted'] === true) item.corrupted = true;
+  if (raw.identified === true) item.identified = true;
+  if (raw['duplicated'] === true) item.mirrored = true;
+  if (raw['fractured'] === true) item.fractured = true;
+  if (raw['synthesised'] === true) item.synthesised = true;
+  if (raw['replica'] === true) item.replica = true;
+
+  const INFLUENCE_KEYS: Record<string, string> = {
+    shaper: 'Shaper', elder: 'Elder', crusader: 'Crusader', hunter: 'Hunter', redeemer: 'Redeemer', warlord: 'Warlord',
+  };
+  const infl: string[] = [];
+  const infObj = raw['influences'] as Record<string, unknown> | undefined;
+  if (infObj && typeof infObj === 'object') {
+    for (const k of Object.keys(infObj)) { const v = INFLUENCE_KEYS[k]; if (v) infl.push(v); }
+  }
+  for (const [k, v] of Object.entries(INFLUENCE_KEYS)) { // 舊式頂層布林（raw.shaper / raw.elder…）
+    if (raw[k] === true && !infl.includes(v)) infl.push(v);
+  }
+  if (infl.length > 0) item.influences = infl;
+
+  // 品質（從 properties 找「品質 / Quality」，取整數百分比）。
+  const props = raw['properties'] as { name?: string; values?: [string, number][] }[] | undefined;
+  if (Array.isArray(props)) {
+    const q = props.find((p) => typeof p.name === 'string' && (p.name.includes('品質') || p.name.toLowerCase().includes('quality')));
+    const v0 = q?.values?.[0]?.[0];
+    if (v0 !== undefined) { const m = /(\d+)/.exec(String(v0)); if (m) item.quality = Number(m[1]); }
+  }
   return item;
 }
 

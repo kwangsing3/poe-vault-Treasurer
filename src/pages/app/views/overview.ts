@@ -18,7 +18,41 @@ import {
   priceLinesHTML, priceStateFor, keyOf, setPriceResolveHook,
   formatPrice, priceTagHTML, requestPrice,
 } from '../prices';
+import { loadBlocks, type FilterBlock, type Style } from '../filter';
+import { matchItem } from '../filterApply';
 import type { View } from '../router';
+
+// 套用物品過濾器時，當前生效的規則（進入總覽頁 / 勾選時載入；避免每次重繪都重讀 localStorage）。
+let appliedBlocks: FilterBlock[] = [];
+
+function rgbCss(c: number[] | undefined): string | null {
+  if (!c || c.length < 3) return null;
+  return c.length >= 4 ? `rgba(${c[0]},${c[1]},${c[2]},${(c[3]! / 255).toFixed(3)})` : `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/** 套用過濾器時，一件物品的覆蓋（class + inline style）；未套用或無命中回空。 */
+function filterOverlay(it: StashItem): { cls: string; style: string } {
+  if (!store.filterApplied) return { cls: '', style: '' };
+  const m = matchItem(it, appliedBlocks);
+  if (!m) return { cls: 'filt-nomatch', style: '' };
+  if (m.action === 'Hide') return { cls: 'filt-dim', style: '' };
+  const border = rgbCss(m.style.borderColor);
+  const bg = rgbCss(m.style.bgColor);
+  let style = '';
+  if (border) style += `box-shadow:inset 0 0 0 2px ${border};`;
+  if (bg) style += `background:${bg};`;
+  return { cls: 'filt-on', style };
+}
+
+/** 把過濾器樣式渲染成「掉落標籤」inline style（銘牌名稱用，模擬遊戲內外觀）。 */
+function dropLabelStyle(s: Style): string {
+  const text = rgbCss(s.textColor) ?? '#cfc9bd';
+  const border = rgbCss(s.borderColor) ?? 'transparent';
+  const bg = rgbCss(s.bgColor) ?? 'rgba(15,15,15,0.85)';
+  const fs = s.fontSize ?? 32;
+  const px = Math.round(15 + (fs - 18) * 0.55); // 18→15px、45→~30px
+  return `display:inline-block;color:${text};border:2px solid ${border};background:${bg};font-size:${px}px;line-height:1.25;padding:5px 12px;border-radius:3px;font-weight:600;`;
+}
 
 const QUAD_CELL = 30; // px
 const NORMAL_CELL = 46; // px
@@ -107,7 +141,8 @@ function layoutHTML(tab: number, layout: StashLayout): string {
   const cells = filled.map((c) => {
     const inner = `<img src="${c.it.icon}" alt="${c.it.name}" loading="lazy" />${c.it.stack !== undefined ? `<span class="stack">${c.it.stack}</span>` : ''}`;
     const sel = c.it.name === selName ? ' sel' : '';
-    return `<div class="lay-slot${sel}" data-id="${c.it.id}" title="${c.it.name}" style="left:${(c.x - minX).toFixed(1)}px;top:${(c.y - minY).toFixed(1)}px;width:${c.w.toFixed(1)}px;height:${c.h.toFixed(1)}px;"><div class="lay-frame"></div>${inner}</div>`;
+    const ov = filterOverlay(c.it);
+    return `<div class="lay-slot${sel} ${ov.cls}" data-id="${c.it.id}" title="${c.it.name}" style="left:${(c.x - minX).toFixed(1)}px;top:${(c.y - minY).toFixed(1)}px;width:${c.w.toFixed(1)}px;height:${c.h.toFixed(1)}px;${ov.style}"><div class="lay-frame"></div>${inner}</div>`;
   });
 
   const pills =
@@ -133,7 +168,8 @@ function itemHTML(it: StashItem, positioned: boolean): string {
     ? `grid-column:${it.x + 1}/span ${it.w};grid-row:${it.y + 1}/span ${it.h};`
     : '';
   const stack = it.stack !== undefined ? `<span class="stack">${it.stack}</span>` : '';
-  return `<div class="gitem ${sel}" style="${pos}--rc:${RARITY_COLOR[it.rarity]};" data-id="${it.id}" data-rarity="${it.rarity}" title="${it.name}">
+  const ov = filterOverlay(it);
+  return `<div class="gitem ${sel} ${ov.cls}" style="${pos}--rc:${RARITY_COLOR[it.rarity]};${ov.style}" data-id="${it.id}" data-rarity="${it.rarity}" title="${it.name}">
     <img src="${it.icon}" alt="${it.name}" loading="lazy" />${stack}
   </div>`;
 }
@@ -297,11 +333,23 @@ function plaqueInner(): string {
       </div>`
       : '';
 
+  // 名稱顯示：套用過濾器時，依命中規則以「掉落標籤」樣式呈現（Hide 則標註）。
+  let nameHtml = `<span class="serif" style="font-size:21px;color:${color};">${sel.name}</span>`;
+  if (store.filterApplied) {
+    const full = STASH_ITEMS.find((x) => x.name === sel.name && (sel.base === undefined || x.base === sel.base));
+    const m = full ? matchItem(full, appliedBlocks) : null;
+    if (m && m.action !== 'Hide') {
+      nameHtml = `<span class="filt-droplabel" style="${dropLabelStyle(m.style)}">${sel.name}</span>`;
+    } else if (m && m.action === 'Hide') {
+      nameHtml = `<span class="serif" style="font-size:21px;color:${color};opacity:0.4;">${sel.name}</span> <span class="kicker">（過濾器隱藏）</span>`;
+    }
+  }
+
   return `
       <span class="kicker">選中物品 · 詳情</span>
       ${art}
       <div style="display:flex;flex-direction:column;gap:5px;">
-        <span class="serif" style="font-size:21px;color:${color};">${sel.name}</span>
+        ${nameHtml}
         <span class="kicker" style="letter-spacing:0.08em;">${rarity} · ${sel.base ?? '—'}${ilvlText}</span>
       </div>
       <div class="divider"></div>
@@ -350,6 +398,9 @@ export const overview: View = {
             <div class="grid-tools">
               <input class="search-box" id="ov-search" placeholder="⌕  搜尋物品 / 基底…" />
               <div class="btn" style="height:30px;">價值 ↓</div>
+              <label class="ov-filter-toggle" title="依物品過濾器規則高亮/淡化（僅 app 內預覽）">
+                <input type="checkbox" id="ov-filter-apply" ${store.filterApplied ? 'checked' : ''} /> 套用過濾器
+              </label>
             </div>
             <div class="grid-wrap" id="ov-grid">${gridHTML()}</div>
             <div class="hand" id="ov-footer" style="font-size:16px;">${footerHTML()}</div>
@@ -363,6 +414,9 @@ export const overview: View = {
     const gridEl = root.querySelector<HTMLElement>('#ov-grid');
     const footerEl = root.querySelector<HTMLElement>('#ov-footer');
     const plaqueEl = root.querySelector<HTMLElement>('#ov-plaque');
+
+    // 進入總覽時載入目前的過濾器規則（反映在別頁編輯後的最新狀態）。
+    if (store.filterApplied) appliedBlocks = loadBlocks();
 
     // 就地刷新銘牌（重新查價按鈕在銘牌內，重繪後需重新綁定）。
     const refreshPlaque = () => {
@@ -418,6 +472,14 @@ export const overview: View = {
         refreshGrid();
       });
     }
+
+    // 套用物品過濾器（顯示層覆蓋）：勾選時讀入最新規則，就地重繪網格與銘牌。
+    root.querySelector<HTMLInputElement>('#ov-filter-apply')?.addEventListener('change', (e) => {
+      store.filterApplied = (e.target as HTMLInputElement).checked;
+      if (store.filterApplied) appliedBlocks = loadBlocks();
+      refreshGrid();
+      refreshPlaque();
+    });
 
     // 切頁籤就地更新（不走全域 update()，避免整個 app 重繪而重置 .content / .tab-rail 的捲動位置）。
     const tabEls = root.querySelectorAll<HTMLElement>('[data-tab]');

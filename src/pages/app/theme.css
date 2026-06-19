@@ -1165,6 +1165,28 @@ body {
   background: var(--ink);
 }
 
+/* ===== 倉庫頁「套用物品過濾器」覆蓋 ===== */
+.ov-filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 12px/1 var(--sans);
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gitem.filt-dim,
+.lay-slot.filt-dim {
+  opacity: 0.22; /* Hide 規則：淡化 */
+}
+.gitem.filt-nomatch,
+.lay-slot.filt-nomatch {
+  opacity: 0.5; /* 沒有任何規則命中：稍微淡化以凸顯有命中的 */
+}
+.gitem.filt-on {
+  border-radius: 3px; /* Show/Minimal：邊框/底色由 inline box-shadow/background 呈現 */
+}
+
 /* ===================== item filter（物品過濾器）===================== */
 .filt-wrap {
   display: grid;
