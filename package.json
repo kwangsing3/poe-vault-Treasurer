@@ -1,7 +1,7 @@
 {
   "name": "poe-vault-treasurer",
   "productName": "PoE Vault Treasurer",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Path of Exile vault treasurer desktop app",
   "main": ".vite/build/main.js",
   "private": true,
