@@ -14,6 +14,10 @@ import { GET, POST } from "../utility/http.mod";
 import { POE_BASE, SEARCH_ENDPOINTS } from "./endpoints";
 import { POE_HEADERS } from "./client";
 import { RateLimiter } from "./rateLimiter";
+import type { PriceListing, PriceQuote } from "../shared/priceQuote";
+
+// 型別事實來源在 src/shared/priceQuote.ts；經 barrel 再匯出以維持既有 import 路徑。
+export type { PriceListing, PriceQuote } from "../shared/priceQuote";
 
 // 物品搜尋佇列（trade-search-request-limit，實測值；收到標頭後自動校正）。
 const searchLimiter = new RateLimiter([
@@ -34,24 +38,6 @@ const exchangeLimiter = new RateLimiter([
 ]);
 
 const SAMPLE = 10; // 通貨 exchange 取線上最便宜的前 N 筆做樣本（物品 search 已改為全量）
-
-/** 單筆掛單（原始幣別）。供詳情頁列表顯示。 */
-export interface PriceListing {
-  amount: number;
-  currency: string;
-}
-
-/**
- * 估價結果。同一次請求的掛單同時含混沌石與神聖石單，故兩種價各別取中位數（無對應掛單則為 null）；
- * 不做跨幣別換算（通貨兌換比之後再處理）。listings 為取樣掛單。
- */
-export interface PriceQuote {
-  chaos: number | null; // 混沌石掛單的去離群中位數
-  divine: number | null; // 神聖石掛單的去離群中位數
-  fetchedAt: number;
-  sampleSize: number; // 取樣掛單總數
-  listings: PriceListing[];
-}
 
 function median(values: number[]): number {
   const s = [...values].sort((a, b) => a - b);

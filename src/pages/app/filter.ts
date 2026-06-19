@@ -186,7 +186,14 @@ function applyStyleLine(style: Style, key: string, rest: string): boolean {
   return false;
 }
 
-const CONDITION_RE = /^(\S+)\s*(==|!=|>=|<=|=|!|<|>)?\s*(.*)$/;
+/** 條件行解析：捕捉 [欄位, 運算子, 值]。供解析與「套用過濾器」評估共用（filterApply.ts）。 */
+export const CONDITION_RE = /^(\S+)\s*(==|!=|>=|<=|=|!|<|>)?\s*(.*)$/;
+
+/** 把條件值（可能含引號的多個 token）拆成名稱陣列：去引號、去空字串。
+ *  供 view 顯示（views/filter.ts）與「套用過濾器」比對（filterApply.ts）共用。 */
+export function tokenizeValues(value: string): string[] {
+  return (value.match(/"[^"]*"|\S+/g) ?? []).map((t) => t.replace(/"/g, '')).filter(Boolean);
+}
 
 /** 由 comments 取一個適合當卡片標題的名字（最後一行有意義的註解，去掉前綴 #）。 */
 function nameFromComments(comments: string[]): string {

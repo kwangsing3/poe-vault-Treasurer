@@ -19,6 +19,7 @@ import {
   serializeFilter,
   parseFilter,
   emptyBlock,
+  tokenizeValues,
 } from "../filter";
 import baseZhRaw from "../base-zh.json";
 
@@ -150,12 +151,6 @@ const CLASS_ZH: Record<string, string> = {
   Pieces: "碎片",
 };
 
-/** 把條件值（含引號的多個 token）拆成名稱陣列。 */
-function valueNames(value: string): string[] {
-  const toks = (value || "").match(/"[^"]*"|\S+/g) ?? [];
-  return toks.map((t) => t.replace(/"/g, "")).filter(Boolean);
-}
-
 /** 數個名稱 → 「前 3 個、…等 N 項」。 */
 function joinFew(names: string[]): string {
   if (names.length <= 3) return names.join("、");
@@ -189,12 +184,12 @@ function condHint(b: FilterBlock): string {
 function cardTitle(b: FilterBlock): string {
   const bt = b.conditions.find((c) => c.field === "BaseType");
   if (bt?.value) {
-    const zh = valueNames(bt.value).map((n) => baseZh[n] ?? n);
+    const zh = tokenizeValues(bt.value).map((n) => baseZh[n] ?? n);
     if (zh.length) return joinFew(zh);
   }
   const cls = b.conditions.find((c) => c.field === "Class");
   if (cls?.value) {
-    const zh = valueNames(cls.value).map((n) => CLASS_ZH[n] ?? n);
+    const zh = tokenizeValues(cls.value).map((n) => CLASS_ZH[n] ?? n);
     if (zh.length) return joinFew(zh);
   }
   return condHint(b) || b.name || "規則";
@@ -235,13 +230,10 @@ function condSummary(b: FilterBlock): string {
   const parts = b.conditions.map((c) => {
     const f = FIELD_ZH[c.field] ?? c.field;
     // 值可能是多個（含引號）token，太長時截斷成「前 4 項 …等 N 項」。
-    const toks = (c.value || "").match(/"[^"]*"|\S+/g) ?? [];
+    const toks = tokenizeValues(c.value);
     const v =
       toks.length > 4
-        ? toks
-            .slice(0, 4)
-            .map((t) => t.replace(/"/g, ""))
-            .join(" ") + ` …等 ${toks.length} 項`
+        ? toks.slice(0, 4).join(" ") + ` …等 ${toks.length} 項`
         : (c.value || "").replace(/"/g, "");
     return `${f}${c.op ? " " + c.op : ""} ${v}`.trim();
   });

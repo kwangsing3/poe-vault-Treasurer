@@ -46,7 +46,8 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 **in-memory store**，所以換頁不重載、跨頁狀態不中斷。所有顯示文字一律用**繁體中文**。
 
 - `theme.css` — 設計系統（色票 / 字體 / 卡片 / 各頁樣式）
-- `data.ts` — 線框雜項 mock（稀有度色票 / 詞綴 / 比價列 等）
+- `data.ts` — 共用設計常數：稀有度色票/標籤、基準通貨換算率（`CURRENCY_META`），及少量線框遺留 mock（`PRICE_ROWS`）。
+- `format.ts` — 共用格式化工具（`num` 數值精簡、`relativeTime` 相對時間）；供多個 view / 模組共用，避免各自重複實作。
 - `stash.ts` — 倉庫資料與**以聯盟為 key 的 vault**。`STASH_TABS`(36 頁固定中繼) +
   `STASH_ITEMS`（**當前聯盟**的物品，live binding）。`loadLeagueVault(league)` 啟動 / 切聯盟時
   透過 `window.poe.getStash(tabIndex, league)` 逐頁載入並快取；`isGridTab()` 區分 2D 網格分頁
@@ -62,7 +63,8 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 - `filter.ts` — 物品過濾器的**語言無關資料模型 + `.filter` 解析/序列化**。`FilterBlock`（含
   `comments`/`headerComment`/`unknown`/`cont` 等無損欄位）；`parseFilter()` 把任意 `.filter`（含整份
   NeverSink）切成結構化區塊，**認得的條件/動作進可編輯欄位、不認得的整行原樣存 `unknown[]`**，序列化時
-  原樣吐回（無損 round-trip，見 `scripts/test-filter-roundtrip.mts` / `inspect-neversink.mts`）。
+  原樣吐回（無損 round-trip，見 `scripts/test-filter-roundtrip.mts` / `inspect-neversink.mts`）。另導出共用的
+  條件值拆解 `tokenizeValues()` 與條件行 regex `CONDITION_RE`，供 `views/filter.ts` 顯示與 `filterApply.ts` 比對共用。
 - `base-zh.json` — 英文 base/通貨 → 繁中對照（顯示層用），由 `scripts/build-base-zh.mjs` 從 `data/name-map/`
   萃取；filter 頁把規則的英文 `BaseType` 顯示成中文。
 - `filterApply.ts` + `base-meta.json` — **倉庫頁套用過濾器**的評估引擎。`matchItem(item, blocks)` 由上而下

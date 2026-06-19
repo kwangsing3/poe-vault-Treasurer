@@ -81,6 +81,8 @@ interface PoeBridge {
   getCurrencyCodes(): Promise<Record<string, string>>;
 }
 
+// preload 橋接的估價 shape；須與 src/shared/priceQuote.ts 的 PriceQuote/PriceListing 保持一致
+// （ambient 全域宣告無法 import 模組型別，故在此鏡像）。
 interface PoePriceListing {
   amount: number;
   currency: string;

@@ -5,7 +5,7 @@
 //
 // 條件來源有二：結構化的 b.conditions，以及 b.unknown 裡的進階條件行（如 HasInfluence）。
 // 支援的條件逐一比對；遇到「不支援的條件」一律讓該區塊不命中（保守：寧可不上色，也不誤上色）。
-import type { FilterBlock, Style } from './filter';
+import { CONDITION_RE, tokenizeValues, type FilterBlock, type Style } from './filter';
 import type { StashItem } from './stash';
 import baseMetaRaw from './base-meta.json';
 
@@ -102,10 +102,6 @@ function toView(it: StashItem): ItemView {
 }
 
 // ── 值與比較工具 ──────────────────────────────────────────────────────────────
-function tokens(value: string): string[] {
-  return (value.match(/"[^"]*"|\S+/g) ?? []).map((t) => t.replace(/"/g, ''));
-}
-
 function strMatch(vals: string[], op: string, targets: string[]): boolean {
   const t = targets.filter(Boolean).map((s) => s.toLowerCase());
   const lower = vals.map((v) => v.toLowerCase());
@@ -127,7 +123,7 @@ function numCmp(itemVal: number | undefined, op: string, ruleVal: number): boole
 }
 
 function boolCmp(flag: boolean, op: string, value: string): boolean {
-  const want = tokens(value)[0];
+  const want = tokenizeValues(value)[0];
   const b = want === undefined ? true : want.toLowerCase() === 'true';
   return op === '!' || op === '!=' ? flag !== b : flag === b;
 }
@@ -155,20 +151,20 @@ type CondResult = 'pass' | 'fail' | 'unsupported';
 function evalCond(field: string, op: string, value: string, v: ItemView): CondResult {
   const ok = (b: boolean): CondResult => (b ? 'pass' : 'fail');
   switch (field) {
-    case 'Class': return ok(strMatch(tokens(value), op, [v.cls]));
-    case 'BaseType': return ok(strMatch(tokens(value), op, [v.enBase, v.zhBase]));
+    case 'Class': return ok(strMatch(tokenizeValues(value), op, [v.cls]));
+    case 'BaseType': return ok(strMatch(tokenizeValues(value), op, [v.enBase, v.zhBase]));
     case 'Rarity': {
-      const want = RARITY_RANK[tokens(value)[0] ?? ''];
+      const want = RARITY_RANK[tokenizeValues(value)[0] ?? ''];
       if (want === undefined || v.rarityRank === undefined) return 'fail';
       return ok(numCmp(v.rarityRank, op, want));
     }
-    case 'ItemLevel': return ok(numCmp(v.ilvl, op, Number(tokens(value)[0])));
-    case 'StackSize': return ok(numCmp(v.stack, op, Number(tokens(value)[0])));
-    case 'Quality': return ok(numCmp(v.quality, op, Number(tokens(value)[0])));
-    case 'LinkedSockets': return ok(numCmp(v.links, op, Number(tokens(value)[0])));
-    case 'MapTier': return ok(numCmp(v.mapTier, op, Number(tokens(value)[0])));
-    case 'Width': return ok(numCmp(v.width, op, Number(tokens(value)[0])));
-    case 'Height': return ok(numCmp(v.height, op, Number(tokens(value)[0])));
+    case 'ItemLevel': return ok(numCmp(v.ilvl, op, Number(tokenizeValues(value)[0])));
+    case 'StackSize': return ok(numCmp(v.stack, op, Number(tokenizeValues(value)[0])));
+    case 'Quality': return ok(numCmp(v.quality, op, Number(tokenizeValues(value)[0])));
+    case 'LinkedSockets': return ok(numCmp(v.links, op, Number(tokenizeValues(value)[0])));
+    case 'MapTier': return ok(numCmp(v.mapTier, op, Number(tokenizeValues(value)[0])));
+    case 'Width': return ok(numCmp(v.width, op, Number(tokenizeValues(value)[0])));
+    case 'Height': return ok(numCmp(v.height, op, Number(tokenizeValues(value)[0])));
     case 'Sockets': case 'SocketGroup': return ok(socketMatch(v, op, value));
     case 'Corrupted': return ok(boolCmp(v.corrupted, op, value));
     case 'Identified': return ok(boolCmp(v.identified, op, value));
@@ -177,7 +173,7 @@ function evalCond(field: string, op: string, value: string, v: ItemView): CondRe
     case 'SynthesisedItem': return ok(boolCmp(v.synthesised, op, value));
     case 'Replica': return ok(boolCmp(v.replica, op, value));
     case 'HasInfluence': {
-      const vals = tokens(value);
+      const vals = tokenizeValues(value);
       const hit = vals.includes('None') ? v.influences.length === 0 : vals.some((x) => v.influences.includes(x));
       return ok(op === '!' || op === '!=' ? !hit : hit);
     }
@@ -185,8 +181,6 @@ function evalCond(field: string, op: string, value: string, v: ItemView): CondRe
       return 'unsupported'; // 其餘條件（HasExplicitMod / DropLevel / GemLevel…）無法比對
   }
 }
-
-const COND_RE = /^(\S+)\s*(==|!=|>=|<=|=|!|<|>)?\s*(.*)$/;
 
 /** 蒐集區塊所有條件（結構化 + unknown 行裡的條件），逐一比對；全 pass 才命中。 */
 function blockMatches(b: FilterBlock, v: ItemView): boolean {
@@ -196,7 +190,7 @@ function blockMatches(b: FilterBlock, v: ItemView): boolean {
   for (const line of b.unknown ?? []) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
-    const m = COND_RE.exec(trimmed);
+    const m = CONDITION_RE.exec(trimmed);
     const field = m?.[1] ?? '';
     if (ACTIONS.has(field)) continue; // 動作行：不影響比對
     if (!CONDITIONS.has(field)) continue; // 非條件（罕見）：忽略

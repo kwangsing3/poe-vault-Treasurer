@@ -1,5 +1,6 @@
 import { STASH_ITEMS, STASH_TABS } from '../stash';
 import { valuation, getHistory, type Snapshot } from '../networth';
+import { num } from '../format';
 import { store, update } from '../store';
 import type { View } from '../router';
 
@@ -13,10 +14,6 @@ const RANGE_LABEL: Record<'24h' | '7d' | '30d', string> = {
   '7d': '近 7 天',
   '30d': '近 30 天',
 };
-
-function num(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
 
 /** 快照時刻：當天顯示時:分，跨日加上月/日。 */
 function whenText(t: number): string {

@@ -3,6 +3,8 @@
 // 價格依聯盟存進 localStorage，開啟時先載入（不再空白）；過期者重新排入查價佇列。
 // 通貨（兌換比）暫不處理，之後再做；目前只估傳奇物品。
 import { STASH_ITEMS, type StashItem } from './stash';
+import { num, relativeTime } from './format';
+import type { PriceListing, PriceQuote } from '../../shared/priceQuote';
 import currencyMetaRaw from './currency-meta.json';
 
 // 通貨代碼 → { 繁中名, 圖示URL }（由 scripts/build-currency-meta.mjs 從 trade static 萃取）。
@@ -12,18 +14,9 @@ const currencyMeta = currencyMetaRaw as Record<string, { zh: string; icon: strin
 const PRICE_TTL = 60 * 60 * 1000; // 1 小時
 const STORE_KEY = 'poe-price-cache-v1';
 
-export interface PriceListing {
-  amount: number;
-  currency: string;
-}
-
-export interface PriceData {
-  chaos: number | null; // 混沌石中位數估價（無混沌石掛單則 null）
-  divine: number | null; // 神聖石中位數估價（無神聖石掛單則 null）
-  fetchedAt: number; // 拉取時間（ms）
-  sampleSize: number; // 取樣掛單總數
-  listings: PriceListing[]; // 取樣掛單（詳情頁列表）
-}
+// 估價資料即 main 進程經 IPC 回傳的 PriceQuote（型別事實來源在 src/shared/priceQuote.ts）。
+export type { PriceListing } from '../../shared/priceQuote';
+export type PriceData = PriceQuote;
 
 /** 估價狀態：未拉取(undefined) / 拉取中 / 未知（查無） / 有價。 */
 export type PriceState = 'loading' | 'unknown' | PriceData;
@@ -209,10 +202,6 @@ export function currencyIcon(code: string): string | undefined {
   return currencyMeta[code]?.icon;
 }
 
-function num(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-
 /** 單一標價 →「數量 x [圖示] 中文幣名」的 HTML 片段（如 24x[圖]混沌石）。 */
 export function priceTagHTML(amount: number, currency: string): string {
   const icon = currencyIcon(currency);
@@ -269,16 +258,5 @@ export function dominantPrice(d: PriceData): { currency: 'chaos' | 'divine'; amo
 
 /** 把單筆掛單格式化（原始幣別）。 */
 export function formatListing(l: PriceListing): string {
-  const amt = Number.isInteger(l.amount) ? l.amount : l.amount.toFixed(1);
-  return `${amt} ${currencyUnit(l.currency)}`;
-}
-
-function relativeTime(ts: number): string {
-  const sec = Math.floor((Date.now() - ts) / 1000);
-  if (sec < 60) return '剛剛';
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} 分鐘前`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} 小時前`;
-  return `${Math.floor(hr / 24)} 天前`;
+  return `${num(l.amount)} ${currencyUnit(l.currency)}`;
 }
