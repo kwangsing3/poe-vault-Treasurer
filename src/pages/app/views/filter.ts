@@ -319,8 +319,6 @@ function editor(b: FilterBlock): string {
         </div>
       </div>
 
-      <div class="filt-prev big" style="${previewStyle(s)}">${cardTitle(b)}</div>
-
       <div class="filt-sec-ttl">條件<button class="filt-add" id="add-cond">＋ 條件</button></div>
       <div class="filt-conds">${b.conditions.map(condRow).join('') || '<div class="filt-empty">尚無條件（匹配全部物品）</div>'}</div>
       ${b.unknown?.length ? `
@@ -620,9 +618,18 @@ function bindListEvents(root: HTMLElement): void {
 // ── 讀取（匯入）行為 ──────────────────────────────────────────────────────────
 /** 解析文字並載入；merge=true 時附加到現有規則，否則取代。 */
 function doImport(text: string, merge: boolean): void {
-  const pf = parseFilter(text);
+  let pf: ReturnType<typeof parseFilter>;
+  try {
+    pf = parseFilter(text);
+  } catch (err) {
+    importMsg = `⚠ 解析失敗：${err instanceof Error ? err.message : String(err)}`;
+    importOpen = true; // 保持面板開啟讓使用者看到錯誤
+    rerender();
+    return;
+  }
   if (!pf.blocks.length) {
-    importMsg = '⚠ 沒有解析到任何規則（檢查內容是否為合法 .filter）。';
+    importMsg = `⚠ 沒有解析到任何規則（讀入 ${text.split(/\r?\n/).length} 行，但找不到 Show/Hide/Minimal 區塊；確認是合法 PoE1 .filter）。`;
+    importOpen = true;
     rerender();
     return;
   }

@@ -3,6 +3,10 @@
 // 價格依聯盟存進 localStorage，開啟時先載入（不再空白）；過期者重新排入查價佇列。
 // 通貨（兌換比）暫不處理，之後再做；目前只估傳奇物品。
 import { STASH_ITEMS, type StashItem } from './stash';
+import currencyMetaRaw from './currency-meta.json';
+
+// 通貨代碼 → { 繁中名, 圖示URL }（由 scripts/build-currency-meta.mjs 從 trade static 萃取）。
+const currencyMeta = currencyMetaRaw as Record<string, { zh: string; icon: string }>;
 
 /** 價格新鮮度門檻：超過此時間（1 小時）視為過期，會重新排入查價佇列。 */
 const PRICE_TTL = 60 * 60 * 1000; // 1 小時
@@ -183,8 +187,24 @@ export function currencyUnit(code: string): string {
   return CURRENCY_LABEL[code] ?? code;
 }
 
+/** 幣別代碼 → 繁中名（未知退回 currencyUnit）。 */
+export function currencyName(code: string): string {
+  return currencyMeta[code]?.zh ?? currencyUnit(code);
+}
+/** 幣別代碼 → 圖示 URL（未知回 undefined）。 */
+export function currencyIcon(code: string): string | undefined {
+  return currencyMeta[code]?.icon;
+}
+
 function num(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/** 單一標價 →「數量 x [圖示] 中文幣名」的 HTML 片段（如 24x[圖]混沌石）。 */
+export function priceTagHTML(amount: number, currency: string): string {
+  const icon = currencyIcon(currency);
+  const img = icon ? `<img class="cur-ico" src="${icon}" alt="" loading="lazy" />` : '';
+  return `<span class="price-tag">${num(amount)}x${img}${currencyName(currency)}</span>`;
 }
 
 /** 把估價狀態格式化成單行字串（混沌石 + 神聖石並列；含相對拉取時間）。 */
@@ -206,11 +226,11 @@ export function priceLinesHTML(state: PriceState | undefined): string {
   if (state === undefined || state === 'loading') return '查價中…';
   if (state === 'unknown') return '未知';
   const lines: string[] = [];
-  if (state.divine !== null) lines.push(`${num(state.divine)} div`);
-  if (state.chaos !== null) lines.push(`${num(state.chaos)} c`);
+  if (state.divine !== null) lines.push(priceTagHTML(state.divine, 'divine'));
+  if (state.chaos !== null) lines.push(priceTagHTML(state.chaos, 'chaos'));
   if (lines.length === 0) return '未知';
   const rows = lines
-    .map((l) => `<span style="display:block;line-height:1.35;">${l}</span>`)
+    .map((l) => `<span style="display:block;line-height:1.6;">${l}</span>`)
     .join('');
   return `${rows}<span style="display:block;color:var(--muted-2);font:500 11px/1.4 var(--sans);">${relativeTime(state.fetchedAt)}</span>`;
 }

@@ -817,6 +817,19 @@ body {
 .price-row:last-child {
   border-bottom: none;
 }
+/* 標價：數量 x [圖示] 中文幣名 */
+.price-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.cur-ico {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  vertical-align: middle;
+}
 
 /* ===================== search ===================== */
 .search {
@@ -1155,7 +1168,7 @@ body {
 /* ===================== item filter（物品過濾器）===================== */
 .filt-wrap {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
+  grid-template-columns: 400px minmax(0, 1fr); /* 左：編輯/輸出工具欄；右：規則清單 */
   gap: 20px;
   padding: 20px 24px;
   min-height: 560px;
@@ -1181,8 +1194,9 @@ body {
   letter-spacing: 0.1em;
   color: var(--ink);
 }
-/* 右側工具欄：編輯 + 輸出堆疊，黏在視窗頂部，長清單捲動時仍可見。 */
+/* 左側工具欄：編輯 + 輸出堆疊，黏在視窗頂部，長清單捲動時仍可見。 */
 .filt-rail {
+  order: -1; /* 置於左欄（規則清單在右） */
   position: sticky;
   top: 12px;
   align-self: start;

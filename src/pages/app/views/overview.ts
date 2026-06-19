@@ -16,7 +16,7 @@ import {
 import { store, toSelected } from '../store';
 import {
   priceLinesHTML, priceStateFor, keyOf, setPriceResolveHook,
-  formatPrice, formatListing, requestPrice,
+  formatPrice, priceTagHTML, requestPrice,
 } from '../prices';
 import type { View } from '../router';
 
@@ -257,18 +257,20 @@ function plaqueInner(): string {
       : '比價 · 多來源（mock）';
   let prices: string;
   if (hasQuote) {
-    // 同一標價聚合：把相同價格的掛單合併成一列，標出筆數（× N）。
-    const byPrice = new Map<string, number>();
+    // 同一標價聚合：相同（金額 + 幣別）的掛單合併成一列，標出筆數。
+    const byPrice = new Map<string, { amount: number; currency: string; n: number }>();
     for (const l of priceState.listings) {
-      const k = formatListing(l);
-      byPrice.set(k, (byPrice.get(k) ?? 0) + 1);
+      const k = `${l.amount}|${l.currency}`;
+      const g = byPrice.get(k);
+      if (g) g.n++;
+      else byPrice.set(k, { amount: l.amount, currency: l.currency, n: 1 });
     }
-    prices = [...byPrice.entries()]
+    prices = [...byPrice.values()]
       .map(
-        ([price, n]) => `
+        (g) => `
       <div class="price-row">
-        <span style="font:600 15px/1 var(--sans);">${price}</span>
-        <span class="ink-2" style="font:500 13px/1 var(--sans);">${n} 筆</span>
+        <span style="font:600 15px/1.2 var(--sans);">${priceTagHTML(g.amount, g.currency)}</span>
+        <span class="ink-2" style="font:500 13px/1 var(--sans);">${g.n} 筆</span>
       </div>`,
       )
       .join('');
