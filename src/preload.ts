@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('auth', {
   status: () => ipcRenderer.invoke('auth:status'),
 });
 
+// Debug 橋接：查詢是否為 debug 模式、訂閱官方 API 請求紀錄（mode=debug 時才有事件）。
+contextBridge.exposeInMainWorld('debug', {
+  enabled: () => ipcRenderer.invoke('debug:enabled'),
+  onApiCall: (cb: (rec: unknown) => void) =>
+    ipcRenderer.on('debug:api', (_e, rec: unknown) => cb(rec)),
+});
+
 // 自繪標題列的視窗控制橋接。
 contextBridge.exposeInMainWorld('win', {
   minimize: () => ipcRenderer.send('win:minimize'),

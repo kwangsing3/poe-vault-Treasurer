@@ -88,6 +88,8 @@ async function request<T>(
 
   await throttle();
 
+  const started = Date.now();
+  let result: Result<T>;
   try {
     const response = await fetch(finalUrl, {
       method: config.method,
@@ -105,7 +107,7 @@ async function request<T>(
         parsed != null
           ? ` Body: ${typeof parsed === "string" ? parsed : JSON.stringify(parsed)}`
           : "";
-      return {
+      result = {
         success: false,
         data: null,
         status: response.status,
@@ -116,19 +118,61 @@ async function request<T>(
           `Server error - Status: ${response.status} ` +
           `(${response.statusText}). URL: ${finalUrl}.${detail}`,
       };
+    } else {
+      result = {
+        success: true,
+        data: parsed as T,
+        status: response.status,
+        statusText: response.statusText,
+        headers: respHeaders,
+        config,
+        error: null,
+      };
     }
-
-    return {
-      success: true,
-      data: parsed as T,
-      status: response.status,
-      statusText: response.statusText,
-      headers: respHeaders,
-      config,
-      error: null,
-    };
   } catch (error) {
-    return toErrorResult<T>(error, config);
+    result = toErrorResult<T>(error, config);
+  }
+
+  notifyObserver(config, result, Date.now() - started);
+  return result;
+}
+
+// ── 請求觀察者（debug 模式用）───────────────────────────────────────────────
+// 由主進程選擇性註冊，把每次請求的 method/url(含 params)/body/狀態回報出去，
+// 供 debug 面板顯示。預設無觀察者 → 零額外負擔；觀察者拋錯不影響請求本身。
+
+/** 一次官方 API 請求的紀錄（供 debug 顯示）。 */
+export interface ApiCallRecord {
+  t: number; // 完成時間戳（ms）
+  method: string;
+  url: string; // 最終 URL（已含 query params）
+  body: string | null; // request body（通常為 JSON 字串）
+  status: number; // HTTP 狀態（網路層失敗為 0）
+  ok: boolean; // 是否成功（2xx）
+  ms: number; // 耗時（不含速率限制等待）
+}
+
+let observer: ((rec: ApiCallRecord) => void) | null = null;
+
+/** 註冊/清除請求觀察者（傳 null 取消）。 */
+export function SetRequestObserver(fn: ((rec: ApiCallRecord) => void) | null): void {
+  observer = fn;
+}
+
+function notifyObserver(config: RequestConfig, result: Result<unknown>, ms: number): void {
+  if (!observer) return;
+  try {
+    observer({
+      t: Date.now(),
+      method: config.method,
+      url: config.url,
+      body: config.body ?? null,
+      status: result.status,
+      ok: result.success,
+      ms,
+    });
+  } catch {
+    /* 觀察者錯誤不可影響請求流程 */
   }
 }
 

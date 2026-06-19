@@ -9,11 +9,17 @@ import {
   currencyCodeByName,
 } from "./api";
 import { login as authLogin, logout as authLogout, getStatus as authStatus } from "./api/oauth";
+import { SetRequestObserver } from "./utility/http.mod";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
+
+// Debug 模式：環境變數 mode=debug 時，把每次官方 API 請求（method/url含params/body/狀態）
+// 轉送給 renderer 顯示在畫面上的 debug 面板。非 debug 模式不註冊觀察者，零額外負擔。
+const DEBUG = (process.env["mode"] ?? process.env["MODE"] ?? "").toLowerCase() === "debug";
+ipcMain.handle("debug:enabled", () => DEBUG);
 
 // 移除預設應用選單（File / Edit / View / Window）。視窗改用隱藏式標題列，
 // 由 renderer 的頂部列（藏品庫 · THE RELIQUARY）兼任標題列。
@@ -63,6 +69,13 @@ const createWindow = () => {
       preload: path.join(__dirname, "preload.js"),
     },
   });
+
+  // Debug 模式：把 http.mod 觀察到的每次請求送到此視窗的 renderer。
+  if (DEBUG) {
+    SetRequestObserver((rec) => {
+      if (!mainWindow.isDestroyed()) mainWindow.webContents.send("debug:api", rec);
+    });
+  }
 
   // 自繪標題列的視窗控制（renderer 按鈕 → IPC）。
   ipcMain.on("win:minimize", () => mainWindow.minimize());

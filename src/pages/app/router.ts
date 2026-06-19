@@ -2,6 +2,7 @@ import { formatStashTotal, loadLeagueVault } from './stash';
 import { loadUniquePrices, setPriceResolveHook } from './prices';
 import { scheduleSnapshots } from './networth';
 import { esc } from './html';
+import { initDebugPanel } from './debugPanel';
 import { store, subscribe, update } from './store';
 import { overview } from './views/overview';
 import { search } from './views/search';
@@ -206,6 +207,7 @@ export function start(root: HTMLElement): void {
   });
   if (!location.hash) location.hash = '#/overview';
   render();
+  void initDebugPanel(); // mode=debug 時掛上 API 請求顯示面板
   void loadAuthStatus();
   void loadLeagues();
   // 載入當前聯盟的倉庫物品（透過 API；目前回傳 mock），完成後重繪以填入各頁內容與總資產。

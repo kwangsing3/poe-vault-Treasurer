@@ -50,6 +50,9 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 - `format.ts` — 共用格式化工具（`num` 數值精簡、`relativeTime` 相對時間）；供多個 view / 模組共用，避免各自重複實作。
 - `html.ts` — `esc()` HTML 跳脫工具。**view 以 template string 拼 HTML，任何「使用者輸入 / 伺服器資料」插值前一律經 `esc()`**
   （物品名/詞綴/base、搜尋字串、過濾器規則名/條件值/匯入訊息、聯盟/帳號名等），避免破壞標籤或注入；測試見 `scripts/test-html-esc.mts`。
+- `debugPanel.ts` — **debug 面板**（僅環境變數 `mode=debug` 時啟用）。掛在 `document.body`（獨立於 #app 換頁重繪），
+  即時顯示主進程轉送的每次官方 API 請求：method / url（拆出 query params）/ request body（JSON 美化）/ 狀態 / 耗時。
+  資料流：`http.mod` 的 `SetRequestObserver`（main 端，僅 debug 註冊）→ `main.ts` 經 `debug:api` IPC → preload `window.debug` → 本面板。
 - `stash.ts` — 倉庫資料與**以聯盟為 key 的 vault**。`STASH_TABS`(36 頁固定中繼) +
   `STASH_ITEMS`（**當前聯盟**的物品，live binding）。`loadLeagueVault(league)` 啟動 / 切聯盟時
   透過 `window.poe.getStash(tabIndex, league)` 逐頁載入並快取；`isGridTab()` 區分 2D 網格分頁
@@ -146,6 +149,11 @@ npm start          # 開發模式（HMR + Electron 視窗）
 npm run package    # 打包成可執行檔資料夾
 npm run make       # 產生安裝檔 + 可攜式 zip
 npx tsc --noEmit   # 型別檢查（Vite 用 esbuild，不會自己跑 tsc）
+
+# Debug 模式：右下角顯示每次官方 API 請求（params / body / 狀態 / 耗時）
+#   PowerShell：$env:mode='debug'; npm start
+#   CMD：       set mode=debug && npm start
+#   bash：      mode=debug npm start
 ```
 
 建置細節與調整方式另見專案 skill：`.claude/skills/build/SKILL.md`。

@@ -115,8 +115,26 @@ interface AuthBridge {
   /** 目前連線狀態（是否已登入、帳號名）。 */
   status(): Promise<AuthStatus>;
 }
+// Debug 橋接：mode=debug 時，主進程把每次官方 API 請求轉送過來顯示。
+// 結構須與 src/utility/http.mod.ts 的 ApiCallRecord 一致（ambient 無法 import，故鏡像）。
+interface DebugApiCall {
+  t: number;
+  method: string;
+  url: string;
+  body: string | null;
+  status: number;
+  ok: boolean;
+  ms: number;
+}
+interface DebugBridge {
+  /** 是否為 debug 模式（環境變數 mode=debug）。 */
+  enabled(): Promise<boolean>;
+  /** 訂閱官方 API 請求紀錄（僅 debug 模式會有事件）。 */
+  onApiCall(cb: (rec: DebugApiCall) => void): void;
+}
 interface Window {
   poe: PoeBridge;
   win: WinBridge;
   auth: AuthBridge;
+  debug: DebugBridge;
 }
