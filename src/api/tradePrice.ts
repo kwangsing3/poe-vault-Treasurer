@@ -123,8 +123,9 @@ export async function getItemPrice(
     filters,
   };
   const body = { query, sort: { price: "asc" } };
+  // throttle:false → 僅由 searchLimiter（依回應標頭動態校正）管控，不被全域靜態節流二次拖慢。
   const search = await searchLimiter.run<SearchResponse>(() =>
-    POST(SEARCH_ENDPOINTS.search(league), body, { headers }),
+    POST(SEARCH_ENDPOINTS.search(league), body, { headers, throttle: false }),
   );
   if (!search.success || !search.data.result?.length) return null;
 
@@ -136,7 +137,7 @@ export async function getItemPrice(
   for (let i = 0; i < ids.length; i += 10) {
     const chunk = ids.slice(i, i + 10);
     const fetched = await fetchLimiter.run<FetchResponse>(() =>
-      GET(SEARCH_ENDPOINTS.fetch(chunk, search.data.id), { headers }),
+      GET(SEARCH_ENDPOINTS.fetch(chunk, search.data.id), { headers, throttle: false }),
     );
     if (!fetched.success) break; // 某批失敗就停，已取得的仍計入估價
     for (const r of fetched.data.result ?? []) {
@@ -174,7 +175,7 @@ export async function getCurrencyPrice(
     engine: "new",
   };
   const res = await exchangeLimiter.run<ExchangeResponse>(() =>
-    POST(SEARCH_ENDPOINTS.exchange(league), body, { headers }),
+    POST(SEARCH_ENDPOINTS.exchange(league), body, { headers, throttle: false }),
   );
   if (!res.success) return null;
 

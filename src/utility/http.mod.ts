@@ -47,6 +47,12 @@ export interface RequestOptions {
   params?: Record<string, unknown>;
   /** 逾時毫秒數，預設 15000 */
   timeout?: number;
+  /**
+   * 是否套用全域節流（SetRatePerMin）。預設 true。
+   * 交給 per-policy RateLimiter 動態管控（依回應 x-rate-limit-* 自我校正）的請求應設 false，
+   * 避免被靜態全域上限二次節流而拖慢。
+   */
+  throttle?: boolean;
 }
 
 /**
@@ -86,7 +92,7 @@ async function request<T>(
     timeout: options.timeout ?? DEFAULT_TIMEOUT,
   };
 
-  await throttle();
+  if (options.throttle !== false) await throttle();
 
   const started = Date.now();
   let result: Result<T>;
