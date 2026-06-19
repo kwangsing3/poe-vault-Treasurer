@@ -14,6 +14,7 @@ import { GET, POST } from "../utility/http.mod";
 import { POE_BASE, SEARCH_ENDPOINTS } from "./endpoints";
 import { POE_HEADERS } from "./client";
 import { RateLimiter } from "./rateLimiter";
+import { robustMedian } from "./priceStats";
 import type { PriceListing, PriceQuote } from "../shared/priceQuote";
 
 // 型別事實來源在 src/shared/priceQuote.ts；經 barrel 再匯出以維持既有 import 路徑。
@@ -39,21 +40,7 @@ const exchangeLimiter = new RateLimiter([
 
 const SAMPLE = 10; // 通貨 exchange 取線上最便宜的前 N 筆做樣本（物品 search 已改為全量）
 
-function median(values: number[]): number {
-  const s = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
-}
-
-/** 去離群（丟掉 < 中位數 50% 或 > 200% 的雜訊）後取中位數；無樣本回 null。 */
-function robustMedian(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const med = median(values);
-  const kept = values.filter((v) => v >= med * 0.5 && v <= med * 2);
-  return median(kept.length > 0 ? kept : values);
-}
-
-/** 取指定幣別掛單的去離群中位數（無該幣別掛單回 null）。 */
+/** 取指定幣別掛單的代表價（去離群；無該幣別掛單回 null）。 */
 function medianForCurrency(listings: PriceListing[], currency: string): number | null {
   const amounts = listings.filter((l) => l.currency === currency).map((l) => l.amount);
   return robustMedian(amounts);

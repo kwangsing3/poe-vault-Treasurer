@@ -53,7 +53,7 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
   透過 `window.poe.getStash(tabIndex, league)` 逐頁載入並快取；`isGridTab()` 區分 2D 網格分頁
   （Quad/Normal/Premium）與特殊分頁（通貨/碎片…改 flow 排列）。資料源為 `mock/stash/get-stash-items-tab{0..35}.json`
   （真實回應；僅 `value` 為 mock）。**在做真正帳號連結前一律以這份 mock 為資料源。**
-- `prices.ts` — 傳奇估價（背景）：經 `window.poe.getItemPrice` 走 trade search，**去離群取中位數**，
+- `prices.ts` — 傳奇估價（背景）：經 `window.poe.getItemPrice` 走 trade search，**取代表價**（價格分層；見 `api/priceStats.ts`），
   同一次請求同時得混沌石 + 神聖石價。單一 worker 的**查價佇列**（支援插隊到最前）；價格依聯盟
   存進 `localStorage`、超過 1 小時視為過期重查。
 - `networth.ts` — 淨資產估值與走勢。`valuation()` **只計已估價真實資產**（目前=傳奇），每件只歸到
@@ -129,7 +129,9 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 
 - `tradePrice.ts` — `getItemPrice`（物品走 `/api/trade/search` 兩段式：search → fetch）與
   `getCurrencyPrice`（通貨走 `/api/trade/exchange`，**暫未從 UI 使用**）。實測這些端點**公開、免登入**即可查。
-  「有效價格」= 線上 + 即刻購買（`sale_type=priced`）+ 限定稀有度 → 同批掛單裡混沌石 / 神聖石**各別去離群取中位數**。
+  「有效價格」= 線上 + 即刻購買（`sale_type=priced`）+ 限定稀有度 → 同批掛單裡混沌石 / 神聖石**各別取代表價**。
+  代表價邏輯抽在純模組 `priceStats.ts`（`robustMedian`）：依 >2× 跳幅把同幣別買斷價分成「價格層」，取最密集那層的中位數
+  （平手取較便宜層），避開舊版「中位數±0.5x~2x」對雙峰偶數樣本的高估；測試見 `scripts/test-price-stats.mts`。
 - `rateLimiter.ts` — per-policy 的請求佇列：多窗口滑動、依回應 `x-rate-limit-*` 標頭自我校正、429 退避。
   search 與 exchange 各一個實例（policy 不同）。**串接官方 API 一律經此佇列**，勿直接打。
 - `staticData.ts` — 由 `mock/trade-data/static.json` 建「通貨名稱 → trade code」對照（通貨估價用，之後接）。
