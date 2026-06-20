@@ -38,7 +38,10 @@ const exchangeLimiter = new RateLimiter([
   { hits: 30, period: 300 },
 ]);
 
-const SAMPLE = 10; // 通貨 exchange 取線上最便宜的前 N 筆做樣本（物品 search 已改為全量）
+const SAMPLE = 10; // 通貨 exchange 取線上最便宜的前 N 筆做樣本
+// 物品 search：search 已 price asc，最便宜的前 N 筆足以代表行情；超過只取前 N、其餘不抓，
+// 大幅減少 fetch 呼叫量（守 rate limit），面板也不再塞滿上百筆。
+const MAX_ITEM_RESULTS = 30;
 
 /** 取指定幣別掛單的代表價（去離群；無該幣別掛單回 null）。 */
 function medianForCurrency(listings: PriceListing[], currency: string): number | null {
@@ -129,10 +132,10 @@ export async function getItemPrice(
   );
   if (!search.success || !search.data.result?.length) return null;
 
-  // 納入「這一次 search 回傳的全部結果」（不再只取前 10 筆）。
+  // 只取最便宜的前 MAX_ITEM_RESULTS 筆（search 已 price asc）；超過的不抓，省 fetch 呼叫。
   // fetch 端點每次上限 10 個 id，故把結果清單分批、逐批取明細後彙總；
   // 每批都過 fetchLimiter（多批時會自動排隊/退避以守住 rate limit）。
-  const ids = search.data.result;
+  const ids = search.data.result.slice(0, MAX_ITEM_RESULTS);
   const listings: PriceListing[] = [];
   for (let i = 0; i < ids.length; i += 10) {
     const chunk = ids.slice(i, i + 10);
