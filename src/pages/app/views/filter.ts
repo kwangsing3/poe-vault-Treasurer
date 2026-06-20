@@ -26,6 +26,41 @@ import baseZhRaw from "../base-zh.json";
 
 // 英文 base/通貨 → 繁中（顯示層；由 scripts/build-base-zh.mjs 從 name-map 萃取）。
 const baseZh = baseZhRaw as Record<string, string>;
+// 反向：繁中 → 英文（由 baseZh 反轉）。供原始碼面板雙向切換基底語言時，把中文基底還原回英文內部值。
+const baseEn: Record<string, string> = {};
+for (const [en, zh] of Object.entries(baseZh)) if (!(zh in baseEn)) baseEn[zh] = en;
+
+// 原始碼 / 匯出時，物品基底（BaseType）的顯示語言。預設英文（全平台相容）；中文台服亦接受。
+// **只切換 BaseType**，Class / 動作 / 其他條件 / 註解一律原樣；內部規則永遠存英文。
+const BASE_LANG_KEY = "poe-filter-base-lang";
+let baseLang: "en" | "zh" = (() => {
+  try {
+    return localStorage.getItem(BASE_LANG_KEY) === "zh" ? "zh" : "en";
+  } catch {
+    return "en";
+  }
+})();
+
+/** 翻譯單一 BaseType 條件值（含引號的多個 token）：逐 token 經 map 轉換、一律重新加引號。 */
+function mapBaseTypeValue(value: string, map: Record<string, string>): string {
+  const toks = tokenizeValues(value);
+  if (!toks.length) return value;
+  return toks.map((t) => `"${map[t] ?? t}"`).join(" ");
+}
+
+/** 回傳「BaseType 值經語言轉換」後的區塊副本（只動 BaseType 條件，其餘欄位共用參考）。 */
+function blocksInBaseLang(blocks: FilterBlock[], map: Record<string, string>): FilterBlock[] {
+  return blocks.map((b) =>
+    b.conditions.some((c) => c.field === "BaseType")
+      ? {
+          ...b,
+          conditions: b.conditions.map((c) =>
+            c.field === "BaseType" ? { ...c, value: mapBaseTypeValue(c.value, map) } : c,
+          ),
+        }
+      : b,
+  );
+}
 
 // ── 模組狀態（跨重繪保留）──────────────────────────────────────────────────────
 let BLOCKS: FilterBlock[] = [];
@@ -41,6 +76,8 @@ let contentRoot: HTMLElement | null = null;
 /** 目前規則 → .filter 文字：匯入內容走無損 serializeFilter（不加產生器檔頭）；
  *  純手工規則才用 serialize()（含產生器檔頭）。以區塊是否帶匯入專屬欄位判定。 */
 function serializeCurrent(): string {
+  // 內部規則永遠存英文；輸出時若選中文，僅把 BaseType 轉成繁中（台服相容）。
+  const blocks = baseLang === "zh" ? blocksInBaseLang(BLOCKS, baseZh) : BLOCKS;
   const imported =
     PREAMBLE.length > 0 ||
     BLOCKS.some(
@@ -48,8 +85,8 @@ function serializeCurrent(): string {
         b.comments?.length || b.headerComment || b.unknown?.length || b.cont,
     );
   return imported
-    ? serializeFilter({ preamble: PREAMBLE, blocks: BLOCKS })
-    : serialize(BLOCKS);
+    ? serializeFilter({ preamble: PREAMBLE, blocks })
+    : serialize(blocks);
 }
 
 function ensureLoaded(): void {
@@ -541,6 +578,7 @@ export const filter: View = {
             <div class="panel-bar">
               <span class="name" title="可直接編輯，離開欄位即反解析回規則">原始碼 · .filter</span>
               <div class="filt-toolbar">
+                <button class="btn" id="base-lang" title="切換產出 .filter 的物品基底語言（英文 / 中文；只影響 BaseType）">基底：${baseLang === "zh" ? "中文" : "EN"}</button>
                 <button class="btn" id="copy-out">複製</button>
                 <button class="btn btn-dark" id="dl-out">下載</button>
               </div>
@@ -591,6 +629,17 @@ export const filter: View = {
     // 讀取（匯入）
     mountImport(root);
 
+    // 切換 .filter 物品基底語言（英文 ⇄ 中文；只影響 BaseType）。
+    root.querySelector("#base-lang")?.addEventListener("click", () => {
+      baseLang = baseLang === "zh" ? "en" : "zh";
+      try {
+        localStorage.setItem(BASE_LANG_KEY, baseLang);
+      } catch {
+        /* 隱私模式忽略 */
+      }
+      rerender();
+    });
+
     // 匯出：複製 / 下載
     root.querySelector("#copy-out")?.addEventListener("click", async () => {
       try {
@@ -621,7 +670,8 @@ export const filter: View = {
         } catch {
           return;
         } // 解析失敗：保留原規則
-        BLOCKS = pf.blocks;
+        // 若目前以中文檢視，把使用者輸入的中文基底還原回英文（內部一律存英文）。
+        BLOCKS = baseLang === "zh" ? blocksInBaseLang(pf.blocks, baseEn) : pf.blocks;
         PREAMBLE = pf.preamble;
         selectedId = BLOCKS[0]?.id ?? null;
         query = "";
