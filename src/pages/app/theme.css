@@ -783,7 +783,6 @@ body {
   flex-shrink: 0;
 }
 
-
 .mod-list,
 .price-list {
   border: 1.5px solid var(--ink);
@@ -1245,6 +1244,12 @@ body {
 .filt-grip:active {
   cursor: grabbing;
 }
+/* 群組首錨點：不可拖曳的標記 */
+.filt-grip.pinned {
+  cursor: default;
+  color: var(--muted-2);
+  opacity: 0.5;
+}
 .filt-card.dragging {
   opacity: 0.45;
 }
@@ -1300,7 +1305,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  height: calc(100vh - 130px); /* 固定高度，子面板才能以 100% 撐滿、不被內容壓縮 */
+  height: calc(
+    100vh - 130px
+  ); /* 固定高度，子面板才能以 100% 撐滿、不被內容壓縮 */
 }
 .filt-ed-panel,
 .filt-out-panel {
@@ -1396,6 +1403,7 @@ body {
 
 /* 區段標題（可折疊） */
 .filt-sec-hd {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1424,6 +1432,22 @@ body {
   border: 1px solid var(--line-2);
   border-radius: 10px;
   padding: 3px 7px;
+}
+/* 在此段新增規則的小按鈕 */
+.filt-node-add {
+  flex-shrink: 0;
+  font: 600 10px/1 var(--sans);
+  color: var(--ink-2);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+.filt-node-add:hover {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
 }
 /* 子段標頭：較淺、字小，凸顯比區段低一階 */
 .filt-sub-hd {
@@ -1462,10 +1486,35 @@ body {
 .filt-card.off {
   opacity: 0.5;
 }
+/* 規則的可點擊展開列：上底色標出「點此展開/收合」的區域 */
 .filt-card-top {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
+  background: var(--panel-3);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+/* 命中區往下延伸進既有間隙（透明、絕對定位 → 不佔版面、不改排版） */
+.filt-card-top::after,
+.filt-sec-hd::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 7px;
+}
+.filt-card-top:hover {
+  background: var(--panel-4);
+  border-color: var(--ink);
+}
+/* 展開後，與下方條件區留點間距 */
+.filt-card.on .filt-card-top {
+  margin-bottom: 8px;
 }
 .filt-badge {
   font: 600 10px/1 var(--sans);

@@ -383,6 +383,74 @@ function isTreeShaped(tree: TreeSec[]): boolean {
   return !(tree.length === 1 && tree[0]!.id === "" && tree[0]!.subs.length === 0);
 }
 
+// ── 拖曳排序的「群組」邊界 ──────────────────────────────────────────────────
+// 區段/子段標記（# [[NNNN]] / # [NNNN]）存在「該段第一條規則」的 comments 裡，且檔頭那條
+// 規則的 comments 還夾帶整份 TOC（大量看似標記的行）。因此「移動規則」不能跨群組、也不能
+// 移動帶標記的群組首（會破壞分節），且不去改寫 comments（避免動到 TOC）。
+const DRAG_SEC_RE = /^#+\s*\[\[\d+\]\]/;
+const DRAG_SUB_RE = /^#+\s*\[\d+\]/;
+function blockHasMarker(b: FilterBlock): boolean {
+  return (b.comments ?? []).some((l) => {
+    const t = l.trim();
+    return DRAG_SEC_RE.test(t) || DRAG_SUB_RE.test(t);
+  });
+}
+/** 每個 BLOCKS 索引所屬的群組序號（遇到帶標記的區塊就換新群組；開頭未分節為群組 0）。 */
+function groupIds(): number[] {
+  const ids: number[] = [];
+  let g = -1;
+  let started = false;
+  for (const b of BLOCKS) {
+    if (blockHasMarker(b) || !started) {
+      g++;
+      started = true;
+    }
+    ids.push(g);
+  }
+  return ids;
+}
+// ── 分層新增（大區段 [[NNNN]] / 中區段 [NNNN] / 規則）──────────────────────────
+// 區段/子段只能藉「帶標記的起始規則」存在（標記寄生在 block.comments）。故新增區段＝
+// 新增一條帶該層標記的起始規則。號碼自動產生（僅作 id/排序顯示，非匹配用）。
+const pad4 = (n: number): string => String(n).padStart(4, "0");
+
+/** 目前所有大區段（[[NNNN]]）號碼的最大值（無則 0）。 */
+function maxSectionNum(): number {
+  let m = 0;
+  for (const b of BLOCKS)
+    for (const c of b.comments ?? []) {
+      const mm = /^#+\s*\[\[(\d+)\]\]/.exec(c.trim());
+      if (mm) m = Math.max(m, Number(mm[1]));
+    }
+  return m;
+}
+/** 大區段標記中的號碼（取最後一個 [[NNNN]]，與 buildTree 一致）。 */
+function sectionNumOf(b: FilterBlock): number {
+  let n = 0;
+  for (const c of b.comments ?? []) {
+    const mm = /^#+\s*\[\[(\d+)\]\]/.exec(c.trim());
+    if (mm) n = Number(mm[1]);
+  }
+  return n;
+}
+function hasSectionMarker(b: FilterBlock): boolean {
+  return (b.comments ?? []).some((l) => /^#+\s*\[\[\d+\]\]/.test(l.trim()));
+}
+function hasSubMarker(b: FilterBlock): boolean {
+  const t = (l: string) => l.trim();
+  return (b.comments ?? []).some((l) => /^#+\s*\[\d+\]/.test(t(l)) && !/^#+\s*\[\[\d+\]\]/.test(t(l)));
+}
+
+/** 各群組「第一條」（帶標記）規則的 id 集合——這些不可拖曳（區段/子段錨點）。 */
+function groupFirstIds(): Set<string> {
+  const gid = groupIds();
+  const s = new Set<string>();
+  BLOCKS.forEach((b, i) => {
+    if (i === 0 || gid[i] !== gid[i - 1]) s.add(b.id);
+  });
+  return s;
+}
+
 /** 蒐集所有節點 key（區段 + 子段），供「全展開」。 */
 function allNodeKeys(tree: TreeSec[]): string[] {
   const keys: string[] = [];
@@ -438,18 +506,28 @@ function nodeHeader(node: TreeSec | TreeSub, cnt: string, open: boolean, sub: bo
     open && node.mb !== undefined && node.ml !== undefined
       ? ` contenteditable="true" spellcheck="false" data-rename-marker="${esc(node.mb)}|${node.ml}"`
       : "";
+  // 有標記區塊（mb）的節點才提供新增。大區段另可新增中區段；兩者皆可新增規則。
+  const add =
+    node.mb !== undefined
+      ? `${sub ? "" : `<button type="button" class="filt-node-add" data-addsub="${esc(node.mb)}" title="在此大區段新增中區段">＋中區段</button>`}
+         <button type="button" class="filt-node-add" data-addrule="Show" data-mb="${esc(node.mb)}" title="在此段新增顯示規則">＋顯示</button>
+         <button type="button" class="filt-node-add" data-addrule="Hide" data-mb="${esc(node.mb)}" title="在此段新增隱藏規則">＋隱藏</button>`
+      : "";
   return `
     <div class="${cls} ${open ? "open" : ""}" data-node="${node.key}"${indent}>
       <button type="button" class="filt-sec-arrow" data-toggle-node="${node.key}" title="${open ? "收合" : "展開"}">${open ? "▾" : "▸"}</button>
       ${idTag}<span class="filt-sec-name"${editable}>${esc(node.title)}</span>
       <span class="filt-sec-cnt">${cnt}</span>
+      ${add}
     </div>`;
 }
 
 /** 規則清單 HTML：區段 ▸ 子段 ▸ 規則 三層折疊樹（預設全收合、只渲染展開節點）。
  *  單一未分節且無子段時平鋪。搜尋時自動展開命中節點。 */
+let dragAnchorIds = new Set<string>(); // 本次渲染中不可拖曳的群組首 id（listHtml 更新）
 function listHtml(): string {
   const tree = buildTree();
+  dragAnchorIds = groupFirstIds();
   const q = query.trim().toLowerCase();
 
   // 手工小檔：單一未分節、無子段 → 平鋪（無樹狀外殼）。
@@ -519,10 +597,15 @@ function blockCard(b: FilterBlock, i: number, indent = 0): string {
   const body = isOpen
     ? condEditor(b)
     : `<div class="filt-card-sum">${condSummary(b)}</div>`;
+  // 群組首（帶區段/子段標記的錨點）不可拖曳，避免破壞分節。
+  const anchor = dragAnchorIds.has(b.id);
+  const grip = anchor
+    ? `<span class="filt-grip pinned" title="區段/子段首條，固定">⌖</span>`
+    : `<span class="filt-grip" data-drag="${b.id}" title="拖曳排序（限同一段內）">⠿</span>`;
   return `
     <div class="filt-card ${isOpen ? "on" : ""} ${isSel ? "sel" : ""} ${off}" data-pick="${b.id}" data-drop="${b.id}"${ind}>
       <div class="filt-card-top">
-        <span class="filt-grip" data-drag="${b.id}" title="拖曳排序">⠿</span>
+        ${grip}
         <button type="button" class="filt-card-arrow" data-toggle="${b.id}" title="${isOpen ? "收合" : "展開"}">${isOpen ? "▾" : "▸"}</button>
         <span class="filt-badge ${actCls}">${actZh}</span>
         <span class="filt-swatch" style="${swatchStyle(b.style)}"></span>
@@ -707,6 +790,7 @@ export const filter: View = {
             <span class="filt-main-ttl">規 則（${BLOCKS.length}）</span>
             <div class="filt-toolbar">
               <button class="btn ${importOpen ? "btn-dark" : ""}" id="open-import">讀取</button>
+              <button class="btn" id="add-section">＋ 大區段</button>
               <button class="btn" id="add-show">＋ 顯示</button>
               <button class="btn" id="add-hide">＋ 隱藏</button>
             </div>
@@ -761,6 +845,19 @@ export const filter: View = {
     };
     root.querySelector("#add-show")?.addEventListener("click", () => addBlock("Show"));
     root.querySelector("#add-hide")?.addEventListener("click", () => addBlock("Hide"));
+
+    // 新增大區段：在最後面建立一條帶 [[NNNN]] 標記的起始規則。
+    root.querySelector("#add-section")?.addEventListener("click", () => {
+      const num = pad4(maxSectionNum() + 100);
+      const nb = emptyBlock("Show");
+      nb.comments = [`# [[${num}]] 新大區段`];
+      BLOCKS.push(nb);
+      selectedId = nb.id;
+      revealBlock(nb.id);
+      expanded.add(nb.id);
+      persist();
+      rerender();
+    });
 
     // 規則清單事件（選取 / 卡片操作 / 區段折疊）
     bindListEvents(root);
@@ -949,9 +1046,8 @@ export const filter: View = {
             | "borderColor"
             | "bgColor";
           b.style[key] = hexToRgb(el.value);
-          persist();
-          livePreview(root, b);
-          refreshOut(root);
+          livePreview(root, b); // 即時預覽（輕量）
+          scheduleHeavy(root); // persist + 原始碼序列化去抖
         }),
       );
 
@@ -961,9 +1057,8 @@ export const filter: View = {
       b.style.fontSize = Number(fs.value);
       const lbl = root.querySelector("#fs-val");
       if (lbl) lbl.textContent = fs.value;
-      persist();
-      livePreview(root, b);
-      refreshOut(root);
+      livePreview(root, b); // 即時預覽（輕量）
+      scheduleHeavy(root); // persist + 原始碼序列化去抖
     });
 
     // 樣式：小地圖圖示
@@ -1118,6 +1213,17 @@ function livePreview(root: HTMLElement, b: FilterBlock): void {
     .querySelectorAll<HTMLElement>(`.filt-prev.big, [data-prev="${b.id}"]`)
     .forEach((el) => el.setAttribute("style", css));
 }
+
+// 拖曳顏色 / 字級時 input 連續觸發：persist（JSON.stringify 全部規則）與 refreshOut
+// （序列化全部規則）很重，每次都做會卡。改為去抖——拖曳中只更新預覽，停手後才落地一次。
+let heavyTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleHeavy(root: HTMLElement): void {
+  clearTimeout(heavyTimer);
+  heavyTimer = setTimeout(() => {
+    persist();
+    refreshOut(root);
+  }, 200);
+}
 /** 只刷新輸出文字。 */
 function refreshOut(root: HTMLElement): void {
   const out = root.querySelector<HTMLTextAreaElement>("#filt-out");
@@ -1171,14 +1277,60 @@ function bindListEvents(root: HTMLElement): void {
       rerender();
     }),
   );
-  // 節點展開 / 收合（區段 + 子段共用 data-node）；點在可編輯標題上不觸發折疊。
+  // 節點展開 / 收合（區段 + 子段共用 data-node）；點可編輯標題或新增鈕不觸發折疊。
   root.querySelectorAll<HTMLElement>("[data-node]").forEach((el) =>
     el.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest("[contenteditable]")) return;
+      if ((e.target as HTMLElement).closest("[contenteditable], [data-addrule]")) return;
       const key = el.dataset["node"]!;
       if (expanded.has(key)) expanded.delete(key);
       else expanded.add(key);
       refreshList(root);
+    }),
+  );
+
+  // 在某段新增規則：插在該段標記區塊之後（＝該段開頭），選取並展開新規則。
+  root.querySelectorAll<HTMLElement>("[data-addrule]").forEach((el) =>
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const at = BLOCKS.findIndex((b) => b.id === el.dataset["mb"]);
+      if (at < 0) return;
+      const nb = emptyBlock(el.dataset["addrule"] as "Show" | "Hide");
+      BLOCKS.splice(at + 1, 0, nb);
+      selectedId = nb.id;
+      revealBlock(nb.id); // 展開所屬區段/子段
+      expanded.add(nb.id); // 並展開新規則本身以便編輯
+      persist();
+      rerender();
+    }),
+  );
+
+  // 在某大區段新增中區段：在該大區段尾端（下一個大區段之前）插入一條帶 [NNNN] 標記的起始規則。
+  root.querySelectorAll<HTMLElement>("[data-addsub]").forEach((el) =>
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const at = BLOCKS.findIndex((b) => b.id === el.dataset["addsub"]);
+      if (at < 0) return;
+      const secNum = sectionNumOf(BLOCKS[at]!);
+      // 該大區段範圍 [at, end)：end = 下一個大區段索引（或結尾）。
+      let end = BLOCKS.length;
+      for (let i = at + 1; i < BLOCKS.length; i++) {
+        if (hasSectionMarker(BLOCKS[i]!)) {
+          end = i;
+          break;
+        }
+      }
+      // 子段號碼 = 母段號 + 既有子段數 + 1（如 [[0300]] → [0301]、[0302]）。
+      let subCount = 0;
+      for (let i = at; i < end; i++) if (hasSubMarker(BLOCKS[i]!)) subCount++;
+      const subNum = pad4(secNum + subCount + 1);
+      const nb = emptyBlock("Show");
+      nb.comments = [`# [${subNum}] 新中區段`];
+      BLOCKS.splice(end, 0, nb);
+      selectedId = nb.id;
+      revealBlock(nb.id);
+      expanded.add(nb.id);
+      persist();
+      rerender();
     }),
   );
 }
@@ -1233,7 +1385,12 @@ function setupDrag(root: HTMLElement): void {
       const under = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
       const card = under?.closest<HTMLElement>("[data-drop]") ?? null;
       clear();
-      if (card && card.dataset["drop"] !== dragId) {
+      // 只在「同一段」的有效目標上顯示插入線（跨段不可放）。
+      const gid = groupIds();
+      const fromIdx = BLOCKS.findIndex((x) => x.id === dragId);
+      const toIdx = card ? BLOCKS.findIndex((x) => x.id === card.dataset["drop"]) : -1;
+      const sameGroup = toIdx >= 0 && fromIdx >= 0 && gid[fromIdx] === gid[toIdx];
+      if (card && card.dataset["drop"] !== dragId && sameGroup) {
         const r = card.getBoundingClientRect();
         where = e.clientY < r.top + r.height / 2 ? "before" : "after";
         card.classList.add(where === "before" ? "drop-before" : "drop-after");
@@ -1252,12 +1409,20 @@ function setupDrag(root: HTMLElement): void {
       targetCard = null;
       clear();
       if (!toId || toId === fromId) return;
+      const gid = groupIds();
       const from = BLOCKS.findIndex((x) => x.id === fromId);
-      if (from < 0) return;
+      const tIdx = BLOCKS.findIndex((x) => x.id === toId);
+      if (from < 0 || tIdx < 0) return;
+      // 僅限「同一段（群組）內」排序，且不可移動群組首（帶標記的錨點）。
+      if (gid[from] !== gid[tIdx]) return;
+      const fromIsAnchor = from === 0 || gid[from] !== gid[from - 1];
+      if (fromIsAnchor) return;
+      const toIsAnchor = tIdx === 0 || gid[tIdx] !== gid[tIdx - 1];
+      // 不可插到群組首（標記列）之前；落在錨點上一律改成它之後。
+      let pos = where === "after" || toIsAnchor ? tIdx + 1 : tIdx;
       const [moved] = BLOCKS.splice(from, 1);
-      let to = BLOCKS.findIndex((x) => x.id === toId);
-      if (where === "after") to += 1;
-      BLOCKS.splice(to, 0, moved!);
+      if (pos > from) pos--; // 移除後修正索引
+      BLOCKS.splice(pos, 0, moved!);
       persist();
       rerender();
     });
