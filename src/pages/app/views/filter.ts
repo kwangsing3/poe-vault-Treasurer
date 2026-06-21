@@ -70,7 +70,7 @@ let loaded = false;
 let importOpen = false; // 「讀取」面板是否展開
 let importMsg = ""; // 上次解析結果摘要
 let query = ""; // 搜尋字串
-let collapsed = new Set<string>(); // 已「收合」的區段（以 group 序號為 key）；預設全展開
+let expanded = new Set<string>(); // 已「展開」的樹節點 key；預設空＝全收合（解 739 條太長 + 懶渲染）
 let contentRoot: HTMLElement | null = null;
 
 /** 目前規則 → .filter 文字：匯入內容走無損 serializeFilter（不加產生器檔頭）；
@@ -282,35 +282,107 @@ function condSummary(b: FilterBlock): string {
 }
 
 // ── 分節分組 + 搜尋 ────────────────────────────────────────────────────────────
-// NeverSink 用 `# [[NNNN]] 區段名` 當分節標記（存在區塊的 comments[] 裡）。
+// NeverSink 標記（存在區塊 comments[] 裡）：`# [[NNNN]] 區段名`（雙括號）= 區段；
+// `# [NNNN] 子段名`（單括號）= 子段。標記會延續到下一個同層標記前的所有區塊。
 const SECTION_RE = /^#+\s*\[\[(\d+)\]\]\s*(.*)$/;
+const SUBSECTION_RE = /^#+\s*\[(\d+)\]\s*(.*)$/; // 注意：雙括號不會命中（\[(\d+)\] 後接的是 [ 非數字）
 
-interface Group {
-  name: string;
-  items: { b: FilterBlock; i: number }[];
+interface TreeRule {
+  b: FilterBlock;
+  i: number; // BLOCKS 中的全域索引（供上移/下移/序號）
+}
+interface TreeSub {
+  key: string;
+  id: string;
+  title: string;
+  rules: TreeRule[];
+}
+interface TreeSec {
+  key: string;
+  id: string;
+  title: string;
+  loose: TreeRule[]; // 直屬區段、在任何子段之前的規則
+  subs: TreeSub[];
 }
 
-/** 依區塊 comments 內的最後一個區段標記，把 BLOCKS 走訪分組（無標記前的歸「未分節」）。 */
-function computeGroups(): Group[] {
-  const groups: Group[] = [];
-  let cur: Group | null = null;
-  BLOCKS.forEach((b, i) => {
-    let marker: string | null = null;
+/**
+ * 把扁平 BLOCKS 走訪成 區段 ▸ 子段 ▸ 規則 的三層樹。
+ * 規則：逐區塊掃 comments，雙括號→換區段（清子段）、單括號→換子段；無標記者沿用前一塊的歸屬。
+ * 只在 id 改變時才開新節點，故檔頭那段 TOC（含整串標記、結尾為 body 區段標頭）只會落成正確的單一區段。
+ */
+function buildTree(): TreeSec[] {
+  const secs: TreeSec[] = [];
+  let sec: TreeSec | null = null;
+  let sub: TreeSub | null = null;
+  let secId = "";
+  let secTitle = "（未分節）";
+  let subId = "";
+  let subTitle = "";
+  for (let i = 0; i < BLOCKS.length; i++) {
+    const b = BLOCKS[i]!;
     for (const c of b.comments ?? []) {
-      const m = SECTION_RE.exec(c.trim());
-      if (m) marker = m[2]!.trim() || m[1]!; // 取段名，無名則用代碼
+      const t = c.trim();
+      const ms = SECTION_RE.exec(t);
+      if (ms) {
+        secId = ms[1]!;
+        secTitle = ms[2]!.trim() || ms[1]!;
+        subId = "";
+        subTitle = "";
+        continue;
+      }
+      const mu = SUBSECTION_RE.exec(t);
+      if (mu) {
+        subId = mu[1]!;
+        subTitle = mu[2]!.trim() || mu[1]!;
+      }
     }
-    if (marker) {
-      cur = { name: marker, items: [] };
-      groups.push(cur);
+    if (!sec || sec.id !== secId) {
+      sec = { key: `sec${secs.length}`, id: secId, title: secTitle, loose: [], subs: [] };
+      secs.push(sec);
+      sub = null;
     }
-    if (!cur) {
-      cur = { name: "（未分節）", items: [] };
-      groups.push(cur);
+    if (subId === "") {
+      sub = null;
+    } else if (!sub || sub.id !== subId) {
+      sub = { key: `${sec.key}_sub${sec.subs.length}`, id: subId, title: subTitle, rules: [] };
+      sec.subs.push(sub);
     }
-    cur.items.push({ b, i });
-  });
-  return groups;
+    if (sub) sub.rules.push({ b, i });
+    else sec.loose.push({ b, i });
+  }
+  return secs;
+}
+
+/** 整棵樹是否「需要樹狀呈現」（否＝單一未分節、無子段 → 平鋪）。 */
+function isTreeShaped(tree: TreeSec[]): boolean {
+  return !(tree.length === 1 && tree[0]!.id === "" && tree[0]!.subs.length === 0);
+}
+
+/** 蒐集所有節點 key（區段 + 子段），供「全展開」。 */
+function allNodeKeys(tree: TreeSec[]): string[] {
+  const keys: string[] = [];
+  for (const s of tree) {
+    keys.push(s.key);
+    for (const su of s.subs) keys.push(su.key);
+  }
+  return keys;
+}
+
+/** 展開「含指定區塊」的區段（與子段），確保該規則在樹中可見（新增/選取後用）。 */
+function revealBlock(id: string | null): void {
+  if (!id) return;
+  for (const s of buildTree()) {
+    if (s.loose.some((r) => r.b.id === id)) {
+      expanded.add(s.key);
+      return;
+    }
+    for (const su of s.subs)
+      if (su.rules.some((r) => r.b.id === id)) {
+        expanded.add(s.key);
+        expanded.add(su.key);
+        return;
+      }
+  }
 }
 
 /** 搜尋比對：名稱 / 標頭註解 / 動作 / 條件欄位+值 / 進階行。 */
@@ -329,39 +401,61 @@ function matchBlock(b: FilterBlock, q: string): boolean {
   return hay.includes(q);
 }
 
-/** 規則清單 HTML：單一群組時平鋪；多群組時分節折疊。搜尋時自動展開命中區段。 */
+const EMPTY_LIST = '<div class="filt-empty">查無符合的規則。</div>';
+
+/** 樹節點標頭（區段/子段共用），sub 走較淺樣式 + 縮排。 */
+function nodeHeader(key: string, id: string, title: string, cnt: string, open: boolean, sub: boolean): string {
+  const cls = sub ? "filt-sec-hd filt-sub-hd" : "filt-sec-hd";
+  const indent = sub ? ' style="margin-left:14px;"' : "";
+  const idTag = id ? `<span class="filt-sec-id">${esc(id)}</span>` : "";
+  return `
+    <div class="${cls} ${open ? "open" : ""}" data-node="${key}"${indent}>
+      <span class="filt-sec-arrow">${open ? "▾" : "▸"}</span>
+      ${idTag}<span class="filt-sec-name">${esc(title)}</span>
+      <span class="filt-sec-cnt">${cnt}</span>
+    </div>`;
+}
+
+/** 規則清單 HTML：區段 ▸ 子段 ▸ 規則 三層折疊樹（預設全收合、只渲染展開節點）。
+ *  單一未分節且無子段時平鋪。搜尋時自動展開命中節點。 */
 function listHtml(): string {
-  const groups = computeGroups();
+  const tree = buildTree();
   const q = query.trim().toLowerCase();
 
-  if (groups.length <= 1) {
-    const items = groups[0]?.items ?? [];
-    const matched = q ? items.filter((it) => matchBlock(it.b, q)) : items;
-    return matched.length
-      ? matched.map((it) => blockCard(it.b, it.i)).join("")
-      : '<div class="filt-empty">查無符合的規則。</div>';
+  // 手工小檔：單一未分節、無子段 → 平鋪（無樹狀外殼）。
+  if (!isTreeShaped(tree)) {
+    const items = q ? tree[0]!.loose.filter((r) => matchBlock(r.b, q)) : tree[0]!.loose;
+    return items.length ? items.map((r) => blockCard(r.b, r.i, 0)).join("") : EMPTY_LIST;
   }
 
+  const searching = q !== "";
   const out: string[] = [];
-  groups.forEach((g, gi) => {
-    const matched = q ? g.items.filter((it) => matchBlock(it.b, q)) : g.items;
-    if (q && matched.length === 0) return; // 搜尋時略過無命中區段
-    const isOpen = q !== "" || !collapsed.has(String(gi)); // 預設展開，使用者可收合
-    const cnt =
-      q && matched.length !== g.items.length
-        ? `${matched.length}/${g.items.length}`
-        : `${g.items.length}`;
-    out.push(`
-      <div class="filt-sec-hd ${isOpen ? "open" : ""}" data-sec="${gi}">
-        <span class="filt-sec-arrow">${isOpen ? "▾" : "▸"}</span>
-        <span class="filt-sec-name">${esc(g.name)}</span>
-        <span class="filt-sec-cnt">${cnt}</span>
-      </div>`);
-    if (isOpen) out.push(...matched.map((it) => blockCard(it.b, it.i)));
-  });
-  return out.length
-    ? out.join("")
-    : '<div class="filt-empty">查無符合的規則。</div>';
+  for (const sec of tree) {
+    const looseM = searching ? sec.loose.filter((r) => matchBlock(r.b, q)) : sec.loose;
+    const subsM = sec.subs.map((su) => ({
+      su,
+      rules: searching ? su.rules.filter((r) => matchBlock(r.b, q)) : su.rules,
+    }));
+    const matchCount = looseM.length + subsM.reduce((s, x) => s + x.rules.length, 0);
+    const total = sec.loose.length + sec.subs.reduce((s, su) => s + su.rules.length, 0);
+    if (searching && matchCount === 0) continue;
+
+    const open = searching || expanded.has(sec.key);
+    const cnt = searching && matchCount !== total ? `${matchCount}/${total}` : `${total}`;
+    out.push(nodeHeader(sec.key, sec.id, sec.title, cnt, open, false));
+    if (!open) continue;
+
+    for (const r of looseM) out.push(blockCard(r.b, r.i, 14));
+    for (const { su, rules } of subsM) {
+      if (searching && rules.length === 0) continue;
+      const subOpen = searching || expanded.has(su.key);
+      const scnt = searching && rules.length !== su.rules.length ? `${rules.length}/${su.rules.length}` : `${su.rules.length}`;
+      out.push(nodeHeader(su.key, su.id, su.title, scnt, subOpen, true));
+      if (!subOpen) continue;
+      for (const r of rules) out.push(blockCard(r.b, r.i, 28));
+    }
+  }
+  return out.length ? out.join("") : EMPTY_LIST;
 }
 
 // ── 讀取（匯入）面板 ──────────────────────────────────────────────────────────
@@ -384,15 +478,16 @@ function importPanel(): string {
 }
 
 // ── 規則清單卡片 ──────────────────────────────────────────────────────────────
-function blockCard(b: FilterBlock, i: number): string {
+function blockCard(b: FilterBlock, i: number, indent = 0): string {
   const sel = b.id === selectedId ? "on" : "";
   const off = b.enabled ? "" : "off";
   const actCls = b.action === "Show" ? "show" : "hide";
   const actZh =
     b.action === "Show" ? "顯示" : b.action === "Hide" ? "隱藏" : "精簡";
   const title = esc(cardTitle(b));
+  const ind = indent ? ` style="margin-left:${indent}px;"` : "";
   return `
-    <div class="filt-card ${sel} ${off}" data-pick="${b.id}">
+    <div class="filt-card ${sel} ${off}" data-pick="${b.id}"${ind}>
       <div class="filt-card-top">
         <span class="filt-badge ${actCls}">${actZh}</span>
         <span class="filt-card-name">${title}</span>
@@ -538,7 +633,7 @@ export const filter: View = {
     const list = BLOCKS.length
       ? listHtml()
       : '<div class="filt-empty">尚無規則，按上方新增或讀取。</div>';
-    const multiGroup = computeGroups().length > 1;
+    const showTree = isTreeShaped(buildTree());
     return `
       <div class="page-head">
         <span class="ttl">物品過濾器 · ITEM FILTER</span>
@@ -561,7 +656,7 @@ export const filter: View = {
               ? `
           <div class="filt-search-row">
             <input class="filt-search" id="filt-search" type="search" placeholder="搜尋規則 / 基底 / 類別…" value="${esc(query)}" />
-            ${multiGroup ? `<button class="filt-add" id="sec-toggle-all" title="全部展開 / 收合">${collapsed.size ? "全展開" : "全收合"}</button>` : ""}
+            ${showTree ? `<button class="filt-add" id="sec-toggle-all" title="全部展開 / 收合">${expanded.size ? "全收合" : "全展開"}</button>` : ""}
           </div>`
               : ""
           }
@@ -594,20 +689,16 @@ export const filter: View = {
     const b = selected();
 
     // 新增規則
-    root.querySelector("#add-show")?.addEventListener("click", () => {
-      const nb = emptyBlock("Show");
+    const addBlock = (action: "Show" | "Hide") => {
+      const nb = emptyBlock(action);
       BLOCKS.push(nb);
       selectedId = nb.id;
+      revealBlock(nb.id); // 展開其所屬區段，確保新規則在樹中可見
       persist();
       rerender();
-    });
-    root.querySelector("#add-hide")?.addEventListener("click", () => {
-      const nb = emptyBlock("Hide");
-      BLOCKS.push(nb);
-      selectedId = nb.id;
-      persist();
-      rerender();
-    });
+    };
+    root.querySelector("#add-show")?.addEventListener("click", () => addBlock("Show"));
+    root.querySelector("#add-hide")?.addEventListener("click", () => addBlock("Hide"));
 
     // 規則清單事件（選取 / 卡片操作 / 區段折疊）
     bindListEvents(root);
@@ -621,8 +712,8 @@ export const filter: View = {
       });
     // 全展開 / 全收合
     root.querySelector("#sec-toggle-all")?.addEventListener("click", () => {
-      if (collapsed.size) collapsed.clear();
-      else computeGroups().forEach((_g, gi) => collapsed.add(String(gi)));
+      if (expanded.size) expanded = new Set();
+      else expanded = new Set(allNodeKeys(buildTree()));
       rerender(); // 重繪以更新按鈕文字
     });
 
@@ -675,7 +766,7 @@ export const filter: View = {
         PREAMBLE = pf.preamble;
         selectedId = BLOCKS[0]?.id ?? null;
         query = "";
-        collapsed = new Set();
+        expanded = new Set();
         persist();
         rerender();
       });
@@ -887,12 +978,12 @@ function bindListEvents(root: HTMLElement): void {
       rerender();
     }),
   );
-  // 區段折疊
-  root.querySelectorAll<HTMLElement>("[data-sec]").forEach((el) =>
+  // 節點展開 / 收合（區段 + 子段共用 data-node）
+  root.querySelectorAll<HTMLElement>("[data-node]").forEach((el) =>
     el.addEventListener("click", () => {
-      const key = el.dataset["sec"]!;
-      if (collapsed.has(key)) collapsed.delete(key);
-      else collapsed.add(key);
+      const key = el.dataset["node"]!;
+      if (expanded.has(key)) expanded.delete(key);
+      else expanded.add(key);
       refreshList(root);
     }),
   );
@@ -926,7 +1017,7 @@ function doImport(text: string, merge: boolean): void {
   }
   selectedId = pf.blocks[0]!.id;
   query = "";
-  collapsed = new Set();
+  expanded = new Set();
   const advanced = pf.blocks.filter((b) => b.unknown?.length).length;
   importMsg = `✓ 已載入 ${pf.blocks.length} 條規則${advanced ? `（${advanced} 條含進階條件，已保留原樣）` : ""}。`;
   importOpen = false;

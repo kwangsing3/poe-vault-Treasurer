@@ -1355,6 +1355,24 @@ body {
   border-radius: 10px;
   padding: 3px 7px;
 }
+/* 子段標頭：較淺、字小，凸顯比區段低一階 */
+.filt-sub-hd {
+  background: var(--panel-2);
+  padding: 5px 9px;
+}
+.filt-sub-hd .filt-sec-name {
+  font-weight: 500;
+  color: var(--muted-2);
+}
+/* [[NNNN]] / [NNNN] 編號小標 */
+.filt-sec-id {
+  font: 600 9px/1 var(--mono);
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  padding: 2px 5px;
+}
 /* 區段內的卡片略縮排，凸顯層級 */
 .filt-sec-hd + .filt-card,
 .filt-sec-hd ~ .filt-card {
