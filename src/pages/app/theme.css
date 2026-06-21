@@ -1190,7 +1190,7 @@ body {
 /* ===================== item filter（物品過濾器）===================== */
 .filt-wrap {
   display: grid;
-  grid-template-columns: 400px minmax(0, 1fr); /* 左：編輯/輸出工具欄；右：規則清單 */
+  grid-template-columns: minmax(0, 1fr) 400px; /* 方案 A：左＝規則樹（導覽）；右＝編輯/原始碼 */
   gap: 20px;
   padding: 20px 24px;
   min-height: 560px;
@@ -1216,9 +1216,9 @@ body {
   letter-spacing: 0.1em;
   color: var(--ink);
 }
-/* 左側工具欄：編輯 + 輸出堆疊，黏在視窗頂部，長清單捲動時仍可見。 */
+/* 右側工具欄：編輯 + 輸出堆疊，黏在視窗頂部，長樹捲動時仍可見。 */
 .filt-rail {
-  order: -1; /* 置於左欄（規則清單在右） */
+  /* 依原始順序落在右欄（規則樹在左）；不再 order:-1 */
   position: sticky;
   top: 12px;
   align-self: start;
