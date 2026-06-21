@@ -525,13 +525,15 @@ function condRow(c: Condition, idx: number): string {
         `<option value="${o}" ${o === c.op ? "selected" : ""}>${o || "包含"}</option>`,
     )
     .join("");
-  // Rarity 用下拉，其餘用文字
+  // Rarity 用下拉；BaseType 用文字 + 可搜尋下拉挑選；其餘用文字
   let valInput: string;
   if (c.field === "Rarity") {
     valInput = `<select class="filt-in" data-cond="val" data-idx="${idx}">${RARITIES.map(
       (r) =>
         `<option value="${r}" ${r === c.value ? "selected" : ""}>${RARITY_ZH[r]}</option>`,
     ).join("")}</select>`;
+  } else if (c.field === "BaseType") {
+    valInput = `<input class="filt-in" data-cond="val" data-idx="${idx}" value="${esc(c.value)}" placeholder="值（可按 ▾ 搜尋挑選）" /><button type="button" class="filt-mini" data-basepick="${idx}" title="從清單搜尋並加入基底">▾</button>`;
   } else {
     valInput = `<input class="filt-in" data-cond="val" data-idx="${idx}" value="${esc(c.value)}" placeholder="值（字串請加引號）" />`;
   }
@@ -559,7 +561,32 @@ function colorRow(
     </div>`;
 }
 
-function editor(b: FilterBlock): string {
+/** 條件編輯（規則名 + 動作 + 條件 + 進階）；置於左欄、與規則樹同側。 */
+function condEditor(b: FilterBlock): string {
+  return `
+    <div class="filt-ed">
+      <div class="filt-ed-head">
+        <input class="filt-in grow" id="ed-name" value="${esc(b.name)}" placeholder="規則名稱" />
+        <div class="filt-seg">
+          <div class="opt ${b.action === "Show" ? "on" : ""}" data-action="Show">顯示</div>
+          <div class="opt ${b.action === "Hide" ? "on" : ""}" data-action="Hide">隱藏</div>
+        </div>
+      </div>
+
+      <div class="filt-sec-ttl">條件<button class="filt-add" id="add-cond">＋ 條件</button></div>
+      <div class="filt-conds">${b.conditions.map(condRow).join("") || '<div class="filt-empty">尚無條件（匹配全部物品）</div>'}</div>
+      ${
+        b.unknown?.length
+          ? `
+      <div class="filt-sec-ttl">進階（保留原樣 · 唯讀）</div>
+      <pre class="filt-passthrough">${b.unknown.map((u) => esc(u)).join("\n")}</pre>`
+          : ""
+      }
+    </div>`;
+}
+
+/** 外觀編輯（即時預覽 + 顏色/字級/小地圖/光束/音效）；置於右欄。 */
+function lookEditor(b: FilterBlock): string {
   const s = b.style;
   const icon = s.minimapIcon;
   const beam = s.beam;
@@ -579,23 +606,6 @@ function editor(b: FilterBlock): string {
   return `
     <div class="filt-ed">
       <div class="filt-prev big" data-prev="${b.id}" style="${previewStyle(b.style)}">${esc(cardTitle(b))}</div>
-      <div class="filt-ed-head">
-        <input class="filt-in grow" id="ed-name" value="${esc(b.name)}" placeholder="規則名稱" />
-        <div class="filt-seg">
-          <div class="opt ${b.action === "Show" ? "on" : ""}" data-action="Show">顯示</div>
-          <div class="opt ${b.action === "Hide" ? "on" : ""}" data-action="Hide">隱藏</div>
-        </div>
-      </div>
-
-      <div class="filt-sec-ttl">條件<button class="filt-add" id="add-cond">＋ 條件</button></div>
-      <div class="filt-conds">${b.conditions.map(condRow).join("") || '<div class="filt-empty">尚無條件（匹配全部物品）</div>'}</div>
-      ${
-        b.unknown?.length
-          ? `
-      <div class="filt-sec-ttl">進階（保留原樣 · 唯讀）</div>
-      <pre class="filt-passthrough">${b.unknown.map((u) => esc(u)).join("\n")}</pre>`
-          : ""
-      }
 
       <div class="filt-sec-ttl">外觀</div>
       ${colorRow("文字顏色", "textColor", s)}
@@ -669,12 +679,16 @@ export const filter: View = {
               : ""
           }
           <div class="filt-list">${list}</div>
+          <div class="panel filt-cond-panel">
+            <div class="panel-bar"><span class="name">條 件</span></div>
+            ${b ? condEditor(b) : '<div class="filt-empty pad">選擇規則以編輯，或新增一條。</div>'}
+          </div>
         </div>
 
         <div class="filt-rail">
           <div class="panel filt-ed-panel">
-            <div class="panel-bar"><span class="name">編 輯</span></div>
-            ${b ? editor(b) : '<div class="filt-empty pad">選擇右側規則以編輯，或新增一條。</div>'}
+            <div class="panel-bar"><span class="name">外觀 · 預覽</span></div>
+            ${b ? lookEditor(b) : '<div class="filt-empty pad">選擇規則以調整外觀。</div>'}
           </div>
 
           <div class="panel filt-out-panel">
@@ -929,8 +943,106 @@ export const filter: View = {
         refreshOut(root);
       }),
     );
+
+    // 基底名：可搜尋下拉挑選
+    setupBasePicker(root);
   },
 };
+
+// ── BaseType 可搜尋下拉挑選 ────────────────────────────────────────────────────
+let baseOpts: { en: string; zh: string; hay: string }[] | null = null;
+function getBaseOpts(): { en: string; zh: string; hay: string }[] {
+  if (!baseOpts) {
+    baseOpts = Object.entries(baseZh).map(([en, zh]) => ({
+      en,
+      zh,
+      hay: `${en} ${zh}`.toLowerCase(),
+    }));
+  }
+  return baseOpts;
+}
+
+/** 為 BaseType 條件掛上可搜尋的基底挑選下拉；選取即把英文基底（加引號）附加到該條件值。 */
+function setupBasePicker(root: HTMLElement): void {
+  const triggers = root.querySelectorAll<HTMLElement>("[data-basepick]");
+  if (!triggers.length) return;
+
+  const pop = document.createElement("div");
+  pop.className = "base-pop";
+  pop.style.display = "none";
+  pop.innerHTML = `<input class="base-pop-q" type="search" placeholder="搜尋基底（中／英）…" /><div class="base-pop-list"></div>`;
+  root.appendChild(pop);
+  const q = pop.querySelector<HTMLInputElement>(".base-pop-q")!;
+  const listEl = pop.querySelector<HTMLElement>(".base-pop-list")!;
+  let activeIdx = -1;
+
+  const renderList = (): void => {
+    const term = q.value.trim().toLowerCase();
+    const opts = getBaseOpts();
+    const matched = (term ? opts.filter((o) => o.hay.includes(term)) : opts).slice(0, 60);
+    listEl.innerHTML = matched.length
+      ? matched
+          .map(
+            (o) =>
+              `<div class="base-pop-opt" data-en="${esc(o.en)}"><span class="zh">${esc(o.zh)}</span><span class="en">${esc(o.en)}</span></div>`,
+          )
+          .join("")
+      : '<div class="base-pop-empty">查無基底</div>';
+    listEl.querySelectorAll<HTMLElement>("[data-en]").forEach((el) =>
+      el.addEventListener("click", () => addBase(el.dataset["en"]!)),
+    );
+  };
+
+  const addBase = (en: string): void => {
+    const b = selected();
+    if (!b || activeIdx < 0) return;
+    const c = b.conditions[activeIdx];
+    if (!c) return;
+    const cur = c.value.trim();
+    c.value = (cur ? `${cur} ` : "") + `"${en}"`;
+    persist();
+    const input = root.querySelector<HTMLInputElement>(`[data-cond="val"][data-idx="${activeIdx}"]`);
+    if (input) input.value = c.value;
+    const prev = root.querySelector<HTMLElement>(".filt-prev.big");
+    if (prev) prev.textContent = cardTitle(b);
+    refreshOut(root);
+    q.focus();
+  };
+
+  const onDocDown = (e: MouseEvent): void => {
+    const t = e.target as HTMLElement;
+    if (!pop.contains(t) && !t.closest("[data-basepick]")) close();
+  };
+  const close = (): void => {
+    pop.style.display = "none";
+    activeIdx = -1;
+    document.removeEventListener("mousedown", onDocDown);
+  };
+  const open = (trigger: HTMLElement, idx: number): void => {
+    activeIdx = idx;
+    pop.style.display = "flex";
+    const tr = trigger.getBoundingClientRect();
+    pop.style.left = `${Math.min(tr.left, window.innerWidth - 320)}px`;
+    pop.style.top = `${tr.bottom + 4}px`;
+    q.value = "";
+    renderList();
+    q.focus();
+    document.addEventListener("mousedown", onDocDown);
+  };
+
+  q.addEventListener("input", renderList);
+  q.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close();
+  });
+  triggers.forEach((t) =>
+    t.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = Number(t.dataset["basepick"]);
+      if (pop.style.display !== "none" && activeIdx === idx) close();
+      else open(t, idx);
+    }),
+  );
+}
 
 /** 只刷新預覽標籤（顏色/字級即時），避免整頁重繪導致輸入失焦。 */
 function livePreview(root: HTMLElement, b: FilterBlock): void {

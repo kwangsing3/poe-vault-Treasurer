@@ -1201,6 +1201,20 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: calc(100vh - 130px); /* 與右欄等高：樹自捲、條件面板黏在下方仍可見 */
+}
+/* 規則樹：佔據剩餘空間並自行捲動 */
+.filt-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 120px;
+}
+/* 條件面板：在左欄底部、與樹同側；自行捲動、不被長樹推走 */
+.filt-cond-panel {
+  flex: 0 0 auto;
+  max-height: 46%;
+  overflow-y: auto;
+  margin-top: 12px;
 }
 .filt-main-bar {
   display: flex;
@@ -1434,9 +1448,65 @@ body {
   white-space: nowrap;
 }
 .filt-prev.big {
-  margin: 12px 0;
-  padding: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
   font-size: 18px;
+  /* 自然展開：長標題換行、隨內容變高，不再被截成一行 */
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  height: auto;
+  line-height: 1.3;
+}
+/* BaseType 可搜尋下拉 */
+.base-pop {
+  position: fixed;
+  z-index: 1000;
+  width: 300px;
+  max-height: 340px;
+  background: var(--panel);
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(43, 42, 39, 0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.base-pop-q {
+  margin: 8px;
+  padding: 7px 10px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 6px;
+  font: 500 12px var(--sans);
+  color: var(--ink);
+  background: var(--panel-2);
+}
+.base-pop-list {
+  overflow-y: auto;
+}
+.base-pop-opt {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+.base-pop-opt:hover {
+  background: var(--panel-3);
+}
+.base-pop-opt .zh {
+  font: 600 12px var(--sans);
+  color: var(--ink);
+}
+.base-pop-opt .en {
+  font: 500 10px var(--mono);
+  color: var(--muted-2);
+  margin-left: auto;
+}
+.base-pop-empty {
+  padding: 12px;
+  color: var(--muted-2);
+  font: 500 12px var(--sans);
 }
 .filt-card-sum {
   font: 500 11px/1.4 var(--sans);
