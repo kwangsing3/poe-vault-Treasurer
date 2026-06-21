@@ -1505,6 +1505,61 @@ body {
   color: var(--muted-2);
   font: 500 12px var(--sans);
 }
+/* 內嵌可搜尋勾選下拉（基底 / 類別） */
+.filt-pick {
+  margin: 0 0 8px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.filt-pick[hidden] {
+  display: none;
+}
+.filt-pick-q {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  font: 500 12px var(--sans);
+  color: var(--ink);
+  background: var(--panel);
+}
+.filt-pick-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+.filt-pick-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font: 500 12px var(--sans);
+}
+.filt-pick-opt:hover {
+  background: var(--panel-3);
+}
+.filt-pick-opt .zh {
+  color: var(--ink);
+}
+.filt-pick-opt .en {
+  margin-left: auto;
+  font: 500 10px var(--mono);
+  color: var(--muted-2);
+}
+/* 可編輯預覽：空白時顯示佔位（cardTitle） */
+.filt-prev.big[contenteditable] {
+  outline: none;
+  cursor: text;
+}
+.filt-prev.big[contenteditable]:empty::before {
+  content: attr(data-ph);
+  opacity: 0.6;
+}
+.filt-prev.big[contenteditable]:focus {
+  box-shadow: 0 0 0 2px var(--ink) inset;
+}
 .filt-card-sum {
   font: 500 11px/1.4 var(--sans);
   color: var(--muted-2);

@@ -486,21 +486,21 @@ function importPanel(): string {
 
 // ── 規則清單卡片 ──────────────────────────────────────────────────────────────
 function blockCard(b: FilterBlock, i: number, indent = 0): string {
-  const isSel = b.id === selectedId;
+  const isOpen = expanded.has(b.id); // 展開＝就地嵌入條件設定框（可多個同時展開）
+  const isSel = b.id === selectedId; // 選中＝右側外觀面板對應的規則
   const off = b.enabled ? "" : "off";
   const actCls = b.action === "Show" ? "show" : "hide";
   const actZh =
     b.action === "Show" ? "顯示" : b.action === "Hide" ? "隱藏" : "精簡";
   const title = esc(cardTitle(b));
   const ind = indent ? ` style="margin-left:${indent}px;"` : "";
-  // 選中＝展開：條件設定框就地嵌進此規則節點；未選＝收合，只顯示一行摘要。
-  const body = isSel
+  const body = isOpen
     ? condEditor(b)
     : `<div class="filt-card-sum">${condSummary(b)}</div>`;
   return `
-    <div class="filt-card ${isSel ? "on" : ""} ${off}" data-pick="${b.id}"${ind}>
+    <div class="filt-card ${isOpen ? "on" : ""} ${isSel ? "sel" : ""} ${off}" data-pick="${b.id}"${ind}>
       <div class="filt-card-top">
-        <span class="filt-card-arrow">${isSel ? "▾" : "▸"}</span>
+        <span class="filt-card-arrow">${isOpen ? "▾" : "▸"}</span>
         <span class="filt-badge ${actCls}">${actZh}</span>
         <span class="filt-swatch" style="${swatchStyle(b.style)}"></span>
         <span class="filt-card-name">${title}</span>
@@ -516,10 +516,15 @@ function blockCard(b: FilterBlock, i: number, indent = 0): string {
     </div>`;
 }
 
+// 只接受 True/False 的條件欄位（值用下拉）。
+const BOOLEAN_FIELDS = new Set(["Corrupted", "Identified"]);
+
 // ── 編輯器：條件 ──────────────────────────────────────────────────────────────
-function condRow(c: Condition, idx: number): string {
+// d = 該條件所屬規則 id（多個規則可同時展開，故每個控制項都帶 data-id 以定位規則）。
+function condRow(c: Condition, idx: number, d: string): string {
   const fieldDef = CONDITION_FIELDS.find((f) => f.key === c.field);
   const ops = fieldDef?.numeric ? NUMERIC_OPS : STRING_OPS;
+  const da = `data-id="${d}" data-idx="${idx}"`;
   const fieldOpts = CONDITION_FIELDS.map(
     (f) =>
       `<option value="${f.key}" ${f.key === c.field ? "selected" : ""}>${FIELD_ZH[f.key] ?? f.key}</option>`,
@@ -530,25 +535,33 @@ function condRow(c: Condition, idx: number): string {
         `<option value="${o}" ${o === c.op ? "selected" : ""}>${o || "包含"}</option>`,
     )
     .join("");
-  // Rarity 用下拉；BaseType 用文字 + 可搜尋下拉挑選；其餘用文字
+  // 值欄：Rarity / 布林 → 下拉；BaseType / Class → 文字 + 可搜尋勾選下拉；其餘 → 文字
   let valInput: string;
+  let pickPanel = "";
   if (c.field === "Rarity") {
-    valInput = `<select class="filt-in" data-cond="val" data-idx="${idx}">${RARITIES.map(
+    valInput = `<select class="filt-in" data-cond="val" ${da}>${RARITIES.map(
       (r) =>
         `<option value="${r}" ${r === c.value ? "selected" : ""}>${RARITY_ZH[r]}</option>`,
     ).join("")}</select>`;
-  } else if (c.field === "BaseType") {
-    valInput = `<input class="filt-in" data-cond="val" data-idx="${idx}" value="${esc(c.value)}" placeholder="值（可按 ▾ 搜尋挑選）" /><button type="button" class="filt-mini" data-basepick="${idx}" title="從清單搜尋並加入基底">▾</button>`;
+  } else if (BOOLEAN_FIELDS.has(c.field)) {
+    valInput = `<select class="filt-in" data-cond="val" ${da}>${["True", "False"]
+      .map((v) => `<option value="${v}" ${v === c.value ? "selected" : ""}>${v === "True" ? "是 True" : "否 False"}</option>`)
+      .join("")}</select>`;
+  } else if (c.field === "BaseType" || c.field === "Class") {
+    const label = c.field === "Class" ? "類別" : "基底";
+    valInput = `<input class="filt-in" data-cond="val" ${da} value="${esc(c.value)}" placeholder="${label}（按 ▾ 搜尋勾選）" /><button type="button" class="filt-mini" data-fieldpick="${c.field}" ${da} title="搜尋並勾選${label}">▾</button>`;
+    pickPanel = `<div class="filt-pick" data-pickpanel="${d}-${idx}" hidden><input class="filt-pick-q" data-pickq="${d}-${idx}" type="search" placeholder="搜尋${label}（中／英）…" /><div class="filt-pick-list" data-picklist="${d}-${idx}"></div></div>`;
   } else {
-    valInput = `<input class="filt-in" data-cond="val" data-idx="${idx}" value="${esc(c.value)}" placeholder="值（字串請加引號）" />`;
+    valInput = `<input class="filt-in" data-cond="val" ${da} value="${esc(c.value)}" placeholder="值（字串請加引號）" />`;
   }
   return `
     <div class="filt-cond">
-      <select class="filt-in" data-cond="field" data-idx="${idx}">${fieldOpts}</select>
-      <select class="filt-in narrow" data-cond="op" data-idx="${idx}">${opOpts}</select>
+      <select class="filt-in" data-cond="field" ${da}>${fieldOpts}</select>
+      <select class="filt-in narrow" data-cond="op" ${da}>${opOpts}</select>
       ${valInput}
-      <button class="filt-mini danger" data-cond="del" data-idx="${idx}" title="移除條件">✕</button>
-    </div>`;
+      <button class="filt-mini danger" data-cond="del" ${da} title="移除條件">✕</button>
+    </div>
+    ${pickPanel}`;
 }
 
 // ── 編輯器：樣式列（顏色） ─────────────────────────────────────────────────────
@@ -571,15 +584,15 @@ function condEditor(b: FilterBlock): string {
   return `
     <div class="filt-ed">
       <div class="filt-ed-head">
-        <input class="filt-in grow" id="ed-name" value="${esc(b.name)}" placeholder="規則名稱" />
         <div class="filt-seg">
-          <div class="opt ${b.action === "Show" ? "on" : ""}" data-action="Show">顯示</div>
-          <div class="opt ${b.action === "Hide" ? "on" : ""}" data-action="Hide">隱藏</div>
+          <div class="opt ${b.action === "Show" ? "on" : ""}" data-action="Show" data-id="${b.id}">顯示</div>
+          <div class="opt ${b.action === "Hide" ? "on" : ""}" data-action="Hide" data-id="${b.id}">隱藏</div>
         </div>
+        <span class="filt-grow"></span>
+        <button class="filt-add" data-addcond data-id="${b.id}">＋ 條件</button>
       </div>
 
-      <div class="filt-sec-ttl">條件<button class="filt-add" id="add-cond">＋ 條件</button></div>
-      <div class="filt-conds">${b.conditions.map(condRow).join("") || '<div class="filt-empty">尚無條件（匹配全部物品）</div>'}</div>
+      <div class="filt-conds">${b.conditions.map((c, i) => condRow(c, i, b.id)).join("") || '<div class="filt-empty">尚無條件（匹配全部物品）</div>'}</div>
       ${
         b.unknown?.length
           ? `
@@ -610,7 +623,7 @@ function lookEditor(b: FilterBlock): string {
   ).join("");
   return `
     <div class="filt-ed">
-      <div class="filt-prev big" data-prev="${b.id}" style="${previewStyle(b.style)}">${esc(cardTitle(b))}</div>
+      <div class="filt-prev big" id="ed-name" data-prev="${b.id}" contenteditable="true" spellcheck="false" style="${previewStyle(b.style)}" data-ph="${esc(cardTitle(b))}">${esc(b.name)}</div>
 
       <div class="filt-sec-ttl">外觀</div>
       ${colorRow("文字顏色", "textColor", s)}
@@ -794,72 +807,80 @@ export const filter: View = {
         rerender();
       });
 
-    if (!b) return;
+    // ── 條件 / 動作 / 新增條件：依 data-id 定位規則（多個規則可同時展開編輯）──
+    const blockById = (el: HTMLElement): FilterBlock | undefined =>
+      BLOCKS.find((x) => x.id === el.dataset["id"]);
 
-    // 規則名稱
-    root
-      .querySelector<HTMLInputElement>("#ed-name")
-      ?.addEventListener("change", (e) => {
-        b.name = (e.target as HTMLInputElement).value;
-        persist();
-        rerender();
-      });
-    // Show/Hide
     root.querySelectorAll<HTMLElement>("[data-action]").forEach((el) =>
       el.addEventListener("click", () => {
-        b.action = el.dataset["action"] as "Show" | "Hide";
+        const bl = blockById(el);
+        if (!bl) return;
+        bl.action = el.dataset["action"] as "Show" | "Hide";
         persist();
         rerender();
       }),
     );
-
-    // 條件：新增
-    root.querySelector("#add-cond")?.addEventListener("click", () => {
-      b.conditions.push({ field: "BaseType", op: "", value: "" });
-      persist();
-      rerender();
-    });
-    // 條件：欄位/運算子/值/刪除
+    root.querySelectorAll<HTMLElement>("[data-addcond]").forEach((el) =>
+      el.addEventListener("click", () => {
+        const bl = blockById(el);
+        if (!bl) return;
+        bl.conditions.push({ field: "BaseType", op: "", value: "" });
+        persist();
+        rerender();
+      }),
+    );
     root.querySelectorAll<HTMLElement>("[data-cond]").forEach((el) => {
+      const bl = blockById(el);
       const idx = Number(el.dataset["idx"]);
       const kind = el.dataset["cond"];
+      if (!bl) return;
       if (kind === "del") {
         el.addEventListener("click", () => {
-          b.conditions.splice(idx, 1);
+          bl.conditions.splice(idx, 1);
           persist();
           rerender();
         });
       } else if (kind === "field") {
         el.addEventListener("change", (e) => {
-          const c = b.conditions[idx]!;
+          const c = bl.conditions[idx]!;
           c.field = (e.target as HTMLSelectElement).value;
           const def = CONDITION_FIELDS.find((f) => f.key === c.field);
-          // 切換數值/字串時，運算子與值重設為合理預設
           if (def?.numeric) {
             if (!NUMERIC_OPS.includes(c.op)) c.op = ">=";
           } else {
             c.op = "";
           }
-          if (c.field === "Rarity" && !RARITIES.includes(c.value))
-            c.value = "Rare";
+          if (c.field === "Rarity" && !RARITIES.includes(c.value)) c.value = "Rare";
+          if (BOOLEAN_FIELDS.has(c.field) && c.value !== "True" && c.value !== "False") c.value = "True";
           persist();
           rerender();
         });
       } else if (kind === "op") {
         el.addEventListener("change", (e) => {
-          b.conditions[idx]!.op = (e.target as HTMLSelectElement).value;
+          bl.conditions[idx]!.op = (e.target as HTMLSelectElement).value;
           persist();
-          rerender();
+          refreshOut(root);
         });
       } else if (kind === "val") {
         el.addEventListener("change", (e) => {
-          b.conditions[idx]!.value = (
-            e.target as HTMLInputElement | HTMLSelectElement
-          ).value;
+          bl.conditions[idx]!.value = (e.target as HTMLInputElement | HTMLSelectElement).value;
           persist();
           refreshOut(root);
         });
       }
+    });
+
+    // 基底 / 類別：可搜尋勾選下拉（內嵌、依 data-id+idx 定位）。
+    setupFieldPickers(root);
+
+    if (!b) return;
+
+    // 預覽即規則名稱（可編輯）：輸入即更新 b.name。
+    const edName = root.querySelector<HTMLElement>("#ed-name");
+    edName?.addEventListener("input", () => {
+      b.name = (edName.textContent ?? "").trim();
+      persist();
+      refreshOut(root);
     });
 
     // 樣式：啟用/停用開關
@@ -944,105 +965,84 @@ export const filter: View = {
         refreshOut(root);
       }),
     );
-
-    // 基底名：可搜尋下拉挑選
-    setupBasePicker(root);
   },
 };
 
-// ── BaseType 可搜尋下拉挑選 ────────────────────────────────────────────────────
-let baseOpts: { en: string; zh: string; hay: string }[] | null = null;
-function getBaseOpts(): { en: string; zh: string; hay: string }[] {
-  if (!baseOpts) {
-    baseOpts = Object.entries(baseZh).map(([en, zh]) => ({
-      en,
-      zh,
-      hay: `${en} ${zh}`.toLowerCase(),
-    }));
+// ── BaseType / Class 可搜尋勾選下拉（內嵌）─────────────────────────────────────
+type Opt = { en: string; zh: string; hay: string };
+let baseOptsCache: Opt[] | null = null;
+let classOptsCache: Opt[] | null = null;
+function pickOpts(field: string): Opt[] {
+  if (field === "Class") {
+    if (!classOptsCache)
+      classOptsCache = Object.entries(CLASS_ZH).map(([en, zh]) => ({ en, zh, hay: `${en} ${zh}`.toLowerCase() }));
+    return classOptsCache;
   }
-  return baseOpts;
+  if (!baseOptsCache)
+    baseOptsCache = Object.entries(baseZh).map(([en, zh]) => ({ en, zh, hay: `${en} ${zh}`.toLowerCase() }));
+  return baseOptsCache;
 }
 
-/** 為 BaseType 條件掛上可搜尋的基底挑選下拉；選取即把英文基底（加引號）附加到該條件值。 */
-function setupBasePicker(root: HTMLElement): void {
-  const triggers = root.querySelectorAll<HTMLElement>("[data-basepick]");
-  if (!triggers.length) return;
+/** 內嵌的可搜尋「勾選」下拉：為每個 BaseType / Class 條件掛上搜尋框 + 勾選清單。
+ *  勾選＝把英文值（加引號）加入該條件值；取消＝移除。多選、即時更新輸入框/原始碼。 */
+function setupFieldPickers(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>("[data-fieldpick]").forEach((trigger) => {
+    const d = trigger.dataset["id"]!;
+    const idx = Number(trigger.dataset["idx"]);
+    const field = trigger.dataset["fieldpick"]!;
+    const key = `${d}-${idx}`;
+    const panel = root.querySelector<HTMLElement>(`[data-pickpanel="${key}"]`);
+    const q = root.querySelector<HTMLInputElement>(`[data-pickq="${key}"]`);
+    const listEl = root.querySelector<HTMLElement>(`[data-picklist="${key}"]`);
+    const bl = BLOCKS.find((x) => x.id === d);
+    const cond = bl?.conditions[idx];
+    if (!panel || !q || !listEl || !cond) return;
 
-  const pop = document.createElement("div");
-  pop.className = "base-pop";
-  pop.style.display = "none";
-  pop.innerHTML = `<input class="base-pop-q" type="search" placeholder="搜尋基底（中／英）…" /><div class="base-pop-list"></div>`;
-  root.appendChild(pop);
-  const q = pop.querySelector<HTMLInputElement>(".base-pop-q")!;
-  const listEl = pop.querySelector<HTMLElement>(".base-pop-list")!;
-  let activeIdx = -1;
+    const apply = (): void => {
+      const input = root.querySelector<HTMLInputElement>(`input[data-cond="val"][data-id="${d}"][data-idx="${idx}"]`);
+      if (input) input.value = cond.value;
+      const ed = root.querySelector<HTMLElement>("#ed-name");
+      if (ed && selectedId === d) ed.setAttribute("data-ph", cardTitle(bl!));
+      persist();
+      refreshOut(root);
+    };
+    const toggleVal = (en: string, on: boolean): void => {
+      const set = new Set(tokenizeValues(cond.value));
+      if (on) set.add(en);
+      else set.delete(en);
+      cond.value = [...set].map((t) => `"${t}"`).join(" ");
+      apply();
+    };
+    const render = (): void => {
+      const term = q.value.trim().toLowerCase();
+      const chosen = new Set(tokenizeValues(cond.value));
+      const opts = pickOpts(field);
+      const matched = (term ? opts.filter((o) => o.hay.includes(term)) : opts).slice(0, 80);
+      listEl.innerHTML = matched.length
+        ? matched
+            .map(
+              (o) =>
+                `<label class="filt-pick-opt"><input type="checkbox" data-en="${esc(o.en)}" ${chosen.has(o.en) ? "checked" : ""}/><span class="zh">${esc(o.zh)}</span><span class="en">${esc(o.en)}</span></label>`,
+            )
+            .join("")
+        : '<div class="base-pop-empty">查無項目</div>';
+      listEl.querySelectorAll<HTMLInputElement>("input[data-en]").forEach((cb) =>
+        cb.addEventListener("change", () => toggleVal(cb.dataset["en"]!, cb.checked)),
+      );
+    };
 
-  const renderList = (): void => {
-    const term = q.value.trim().toLowerCase();
-    const opts = getBaseOpts();
-    const matched = (term ? opts.filter((o) => o.hay.includes(term)) : opts).slice(0, 60);
-    listEl.innerHTML = matched.length
-      ? matched
-          .map(
-            (o) =>
-              `<div class="base-pop-opt" data-en="${esc(o.en)}"><span class="zh">${esc(o.zh)}</span><span class="en">${esc(o.en)}</span></div>`,
-          )
-          .join("")
-      : '<div class="base-pop-empty">查無基底</div>';
-    listEl.querySelectorAll<HTMLElement>("[data-en]").forEach((el) =>
-      el.addEventListener("click", () => addBase(el.dataset["en"]!)),
-    );
-  };
-
-  const addBase = (en: string): void => {
-    const b = selected();
-    if (!b || activeIdx < 0) return;
-    const c = b.conditions[activeIdx];
-    if (!c) return;
-    const cur = c.value.trim();
-    c.value = (cur ? `${cur} ` : "") + `"${en}"`;
-    persist();
-    const input = root.querySelector<HTMLInputElement>(`[data-cond="val"][data-idx="${activeIdx}"]`);
-    if (input) input.value = c.value;
-    const prev = root.querySelector<HTMLElement>(".filt-prev.big");
-    if (prev) prev.textContent = cardTitle(b);
-    refreshOut(root);
-    q.focus();
-  };
-
-  const onDocDown = (e: MouseEvent): void => {
-    const t = e.target as HTMLElement;
-    if (!pop.contains(t) && !t.closest("[data-basepick]")) close();
-  };
-  const close = (): void => {
-    pop.style.display = "none";
-    activeIdx = -1;
-    document.removeEventListener("mousedown", onDocDown);
-  };
-  const open = (trigger: HTMLElement, idx: number): void => {
-    activeIdx = idx;
-    pop.style.display = "flex";
-    const tr = trigger.getBoundingClientRect();
-    pop.style.left = `${Math.min(tr.left, window.innerWidth - 320)}px`;
-    pop.style.top = `${tr.bottom + 4}px`;
-    q.value = "";
-    renderList();
-    q.focus();
-    document.addEventListener("mousedown", onDocDown);
-  };
-
-  q.addEventListener("input", renderList);
-  q.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  triggers.forEach((t) =>
-    t.addEventListener("click", (e) => {
+    q.addEventListener("input", render);
+    trigger.addEventListener("click", (e) => {
       e.stopPropagation();
-      const idx = Number(t.dataset["basepick"]);
-      if (pop.style.display !== "none" && activeIdx === idx) close();
-      else open(t, idx);
-    }),
-  );
+      const show = panel.hidden;
+      panel.hidden = !show;
+      if (show) {
+        q.value = "";
+        render();
+        q.focus();
+      }
+    });
+  });
 }
 
 /** 只刷新預覽標籤（顏色/字級即時），避免整頁重繪導致輸入失焦。 */
@@ -1075,10 +1075,13 @@ function bindListEvents(root: HTMLElement): void {
   root.querySelectorAll<HTMLElement>("[data-pick]").forEach((el) =>
     el.addEventListener("click", (e) => {
       const t = e.target as HTMLElement;
-      // 操作鈕、或點在展開後的內嵌條件編輯器內 → 不重新選取（避免重繪/失焦）。
+      // 操作鈕、或點在展開後的內嵌條件編輯器內 → 不切換（避免重繪/失焦）。
       if (t.closest("[data-act], .filt-ed")) return;
       const id = el.dataset["pick"]!;
-      selectedId = selectedId === id ? null : id; // 再點同一張＝收合
+      // 切換此規則的展開（多個可同時展開，互不關閉）；同時設為選中（右側外觀對應它）。
+      if (expanded.has(id)) expanded.delete(id);
+      else expanded.add(id);
+      selectedId = id;
       rerender();
     }),
   );
