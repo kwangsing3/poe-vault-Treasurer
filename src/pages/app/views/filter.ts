@@ -548,7 +548,9 @@ function condRow(c: Condition, idx: number, d: string): string {
       .join("")}</select>`;
   } else if (c.field === "BaseType" || c.field === "Class") {
     const label = c.field === "Class" ? "類別" : "基底";
-    valInput = `<input class="filt-in" data-cond="val" ${da} value="${esc(c.value)}" placeholder="${label}（按 ▾ 搜尋勾選）" /><button type="button" class="filt-mini" data-fieldpick="${c.field}" ${da} title="搜尋並勾選${label}">▾</button>`;
+    // 跟原始碼同步：中文模式時 BaseType 顯示繁中（內部仍存英文，編輯時換回）。
+    const shown = c.field === "BaseType" && baseLang === "zh" ? mapBaseTypeValue(c.value, baseZh) : c.value;
+    valInput = `<input class="filt-in" data-cond="val" ${da} value="${esc(shown)}" placeholder="${label}（按 ▾ 搜尋勾選）" /><button type="button" class="filt-mini" data-fieldpick="${c.field}" ${da} title="搜尋並勾選${label}">▾</button>`;
   } else {
     valInput = `<input class="filt-in" data-cond="val" ${da} value="${esc(c.value)}" placeholder="值（字串請加引號）" />`;
   }
@@ -860,7 +862,11 @@ export const filter: View = {
         });
       } else if (kind === "val") {
         el.addEventListener("change", (e) => {
-          bl.conditions[idx]!.value = (e.target as HTMLInputElement | HTMLSelectElement).value;
+          const c = bl.conditions[idx]!;
+          let v = (e.target as HTMLInputElement | HTMLSelectElement).value;
+          // 中文模式下手打的 BaseType 還原回英文（內部一律存英文）。
+          if (c.field === "BaseType" && baseLang === "zh") v = mapBaseTypeValue(v, baseEn);
+          c.value = v;
           persist();
           refreshOut(root);
         });
@@ -976,7 +982,10 @@ function pickOpts(field: string): Opt[] {
     return classOptsCache;
   }
   if (!baseOptsCache)
-    baseOptsCache = Object.entries(baseZh).map(([en, zh]) => ({ en, zh, hay: `${en} ${zh}`.toLowerCase() }));
+    baseOptsCache = Object.entries(baseZh)
+      // 過濾 name-map 殘留的純數字雜訊項（如 737→7465），不顯示在下拉。
+      .filter(([en, zh]) => !/^\d+$/.test(en) && !/^\d+$/.test(zh))
+      .map(([en, zh]) => ({ en, zh, hay: `${en} ${zh}`.toLowerCase() }));
   return baseOptsCache;
 }
 
@@ -1021,7 +1030,11 @@ function setupFieldPickers(root: HTMLElement): void {
     else set.delete(en);
     active.cond.value = [...set].map((t) => `"${t}"`).join(" ");
     const input = root.querySelector<HTMLInputElement>(`input[data-cond="val"][data-id="${active.d}"][data-idx="${active.idx}"]`);
-    if (input) input.value = active.cond.value;
+    if (input)
+      input.value =
+        active.field === "BaseType" && baseLang === "zh"
+          ? mapBaseTypeValue(active.cond.value, baseZh)
+          : active.cond.value;
     const ed = root.querySelector<HTMLElement>("#ed-name");
     if (ed && selectedId === active.d) ed.setAttribute("data-ph", cardTitle(active.bl));
     persist();
