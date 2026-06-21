@@ -486,22 +486,27 @@ function importPanel(): string {
 
 // ── 規則清單卡片 ──────────────────────────────────────────────────────────────
 function blockCard(b: FilterBlock, i: number, indent = 0): string {
-  const sel = b.id === selectedId ? "on" : "";
+  const isSel = b.id === selectedId;
   const off = b.enabled ? "" : "off";
   const actCls = b.action === "Show" ? "show" : "hide";
   const actZh =
     b.action === "Show" ? "顯示" : b.action === "Hide" ? "隱藏" : "精簡";
   const title = esc(cardTitle(b));
   const ind = indent ? ` style="margin-left:${indent}px;"` : "";
+  // 選中＝展開：條件設定框就地嵌進此規則節點；未選＝收合，只顯示一行摘要。
+  const body = isSel
+    ? condEditor(b)
+    : `<div class="filt-card-sum">${condSummary(b)}</div>`;
   return `
-    <div class="filt-card ${sel} ${off}" data-pick="${b.id}"${ind}>
+    <div class="filt-card ${isSel ? "on" : ""} ${off}" data-pick="${b.id}"${ind}>
       <div class="filt-card-top">
+        <span class="filt-card-arrow">${isSel ? "▾" : "▸"}</span>
         <span class="filt-badge ${actCls}">${actZh}</span>
         <span class="filt-swatch" style="${swatchStyle(b.style)}"></span>
         <span class="filt-card-name">${title}</span>
         <span class="filt-card-ord">${i + 1}</span>
       </div>
-      <div class="filt-card-sum">${condSummary(b)}</div>
+      ${body}
       <div class="filt-card-acts">
         <button class="filt-mini" data-act="up" data-id="${b.id}" title="上移">▲</button>
         <button class="filt-mini" data-act="down" data-id="${b.id}" title="下移">▼</button>
@@ -679,16 +684,12 @@ export const filter: View = {
               : ""
           }
           <div class="filt-list">${list}</div>
-          <div class="panel filt-cond-panel">
-            <div class="panel-bar"><span class="name">條 件</span></div>
-            ${b ? condEditor(b) : '<div class="filt-empty pad">選擇規則以編輯，或新增一條。</div>'}
-          </div>
         </div>
 
         <div class="filt-rail">
           <div class="panel filt-ed-panel">
             <div class="panel-bar"><span class="name">外觀 · 預覽</span></div>
-            ${b ? lookEditor(b) : '<div class="filt-empty pad">選擇規則以調整外觀。</div>'}
+            ${b ? lookEditor(b) : '<div class="filt-empty pad">點選左側規則以調整外觀。</div>'}
           </div>
 
           <div class="panel filt-out-panel">
@@ -1073,8 +1074,11 @@ function bindListEvents(root: HTMLElement): void {
   // 選取規則
   root.querySelectorAll<HTMLElement>("[data-pick]").forEach((el) =>
     el.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest("[data-act]")) return; // 操作鈕不觸發選取
-      selectedId = el.dataset["pick"]!;
+      const t = e.target as HTMLElement;
+      // 操作鈕、或點在展開後的內嵌條件編輯器內 → 不重新選取（避免重繪/失焦）。
+      if (t.closest("[data-act], .filt-ed")) return;
+      const id = el.dataset["pick"]!;
+      selectedId = selectedId === id ? null : id; // 再點同一張＝收合
       rerender();
     }),
   );

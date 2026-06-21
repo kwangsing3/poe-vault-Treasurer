@@ -1201,20 +1201,17 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: calc(100vh - 130px); /* 與右欄等高：樹自捲、條件面板黏在下方仍可見 */
 }
-/* 規則樹：佔據剩餘空間並自行捲動 */
-.filt-list {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  min-height: 120px;
+/* 規則節點箭頭（▸ 收合 / ▾ 展開＝內嵌條件） */
+.filt-card-arrow {
+  font-size: 10px;
+  color: var(--muted-2);
+  width: 11px;
+  flex-shrink: 0;
 }
-/* 條件面板：在左欄底部、與樹同側；自行捲動、不被長樹推走 */
-.filt-cond-panel {
-  flex: 0 0 auto;
-  max-height: 46%;
-  overflow-y: auto;
-  margin-top: 12px;
+/* 選中（展開）規則節點：內嵌的條件編輯器與卡片融為一體 */
+.filt-card.on .filt-ed {
+  padding: 10px 2px 2px;
 }
 .filt-main-bar {
   display: flex;
