@@ -1203,7 +1203,7 @@ body {
   min-width: 0;
 }
 /* 規則節點箭頭（▸ 收合 / ▾ 展開＝內嵌條件） */
-/* 箭頭＝明確的展開 / 收合按鈕（夠大的點擊區，避免點到標題） */
+/* 箭頭＝明確的展開 / 收合按鈕；平常就有底色 + 邊框，標出可點擊的收放區域 */
 .filt-card-arrow,
 .filt-sec-arrow {
   flex-shrink: 0;
@@ -1214,17 +1214,17 @@ body {
   justify-content: center;
   font-size: 11px;
   color: var(--ink-2);
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--panel-3);
+  border: 1px solid var(--line-2);
   border-radius: 5px;
   cursor: pointer;
   padding: 0;
 }
 .filt-card-arrow:hover,
 .filt-sec-arrow:hover {
-  background: var(--panel-3);
-  border-color: var(--line-2);
-  color: var(--ink);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
 }
 /* 選中（展開）規則節點：內嵌的條件編輯器與卡片融為一體 */
 .filt-card.on .filt-ed {
