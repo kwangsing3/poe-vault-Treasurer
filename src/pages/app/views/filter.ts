@@ -440,7 +440,7 @@ function nodeHeader(node: TreeSec | TreeSub, cnt: string, open: boolean, sub: bo
       : "";
   return `
     <div class="${cls} ${open ? "open" : ""}" data-node="${node.key}"${indent}>
-      <span class="filt-sec-arrow">${open ? "▾" : "▸"}</span>
+      <button type="button" class="filt-sec-arrow" data-toggle-node="${node.key}" title="${open ? "收合" : "展開"}">${open ? "▾" : "▸"}</button>
       ${idTag}<span class="filt-sec-name"${editable}>${esc(node.title)}</span>
       <span class="filt-sec-cnt">${cnt}</span>
     </div>`;
@@ -523,7 +523,7 @@ function blockCard(b: FilterBlock, i: number, indent = 0): string {
     <div class="filt-card ${isOpen ? "on" : ""} ${isSel ? "sel" : ""} ${off}" data-pick="${b.id}" data-drop="${b.id}"${ind}>
       <div class="filt-card-top">
         <span class="filt-grip" data-drag="${b.id}" title="拖曳排序">⠿</span>
-        <span class="filt-card-arrow">${isOpen ? "▾" : "▸"}</span>
+        <button type="button" class="filt-card-arrow" data-toggle="${b.id}" title="${isOpen ? "收合" : "展開"}">${isOpen ? "▾" : "▸"}</button>
         <span class="filt-badge ${actCls}">${actZh}</span>
         <span class="filt-swatch" style="${swatchStyle(b.style)}"></span>
         ${
