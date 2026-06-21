@@ -21,6 +21,8 @@ if (started) {
 // 轉送給 renderer 顯示在畫面上的 debug 面板。非 debug 模式不註冊觀察者，零額外負擔。
 const DEBUG = (process.env["mode"] ?? process.env["MODE"] ?? "").toLowerCase() === "debug";
 ipcMain.handle("debug:enabled", () => DEBUG);
+// Debug 模式另開 CDP 遠端除錯埠，方便自動化驗證 / 截圖（非 debug 不開）。
+if (DEBUG) app.commandLine.appendSwitch("remote-debugging-port", "9223");
 
 // 移除預設應用選單（File / Edit / View / Window）。視窗改用隱藏式標題列，
 // 由 renderer 的頂部列（藏品庫 · THE RELIQUARY）兼任標題列。
