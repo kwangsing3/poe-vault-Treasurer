@@ -218,8 +218,8 @@ function condHint(b: FilterBlock): string {
   return "";
 }
 
-/** 卡片友善標題：優先中文 base type，其次類別，再次條件提示，最後規則名。 */
-function cardTitle(b: FilterBlock): string {
+/** 衍生標題：中文 base type → 類別 → 條件提示 → 規則名。 */
+function derivedTitle(b: FilterBlock): string {
   const bt = b.conditions.find((c) => c.field === "BaseType");
   if (bt?.value) {
     const zh = tokenizeValues(bt.value).map((n) => baseZh[n] ?? n);
@@ -231,6 +231,11 @@ function cardTitle(b: FilterBlock): string {
     if (zh.length) return joinFew(zh);
   }
   return condHint(b) || b.name || "規則";
+}
+
+/** 規則節點標題：使用者自訂標題優先，否則用衍生標題。 */
+function cardTitle(b: FilterBlock): string {
+  return b.title?.trim() || derivedTitle(b);
 }
 
 // ── 顏色工具 ──────────────────────────────────────────────────────────────────
@@ -303,6 +308,8 @@ interface TreeSub {
   id: string;
   title: string;
   rules: TreeRule[];
+  mb?: string | undefined; // 標記所在區塊 id（供編輯標題）
+  ml?: number | undefined; // 標記在該區塊 comments[] 的索引
 }
 interface TreeSec {
   key: string;
@@ -310,6 +317,8 @@ interface TreeSec {
   title: string;
   loose: TreeRule[]; // 直屬區段、在任何子段之前的規則
   subs: TreeSub[];
+  mb?: string | undefined;
+  ml?: number | undefined;
 }
 
 /**
@@ -323,16 +332,23 @@ function buildTree(): TreeSec[] {
   let sub: TreeSub | null = null;
   let secId = "";
   let secTitle = "（未分節）";
+  let secMb: string | undefined;
+  let secMl: number | undefined;
   let subId = "";
   let subTitle = "";
+  let subMb: string | undefined;
+  let subMl: number | undefined;
   for (let i = 0; i < BLOCKS.length; i++) {
     const b = BLOCKS[i]!;
-    for (const c of b.comments ?? []) {
-      const t = c.trim();
+    const cmts = b.comments ?? [];
+    for (let li = 0; li < cmts.length; li++) {
+      const t = cmts[li]!.trim();
       const ms = SECTION_RE.exec(t);
       if (ms) {
         secId = ms[1]!;
         secTitle = ms[2]!.trim() || ms[1]!;
+        secMb = b.id;
+        secMl = li;
         subId = "";
         subTitle = "";
         continue;
@@ -341,17 +357,19 @@ function buildTree(): TreeSec[] {
       if (mu) {
         subId = mu[1]!;
         subTitle = mu[2]!.trim() || mu[1]!;
+        subMb = b.id;
+        subMl = li;
       }
     }
     if (!sec || sec.id !== secId) {
-      sec = { key: `sec${secs.length}`, id: secId, title: secTitle, loose: [], subs: [] };
+      sec = { key: `sec${secs.length}`, id: secId, title: secTitle, loose: [], subs: [], mb: secMb, ml: secMl };
       secs.push(sec);
       sub = null;
     }
     if (subId === "") {
       sub = null;
     } else if (!sub || sub.id !== subId) {
-      sub = { key: `${sec.key}_sub${sec.subs.length}`, id: subId, title: subTitle, rules: [] };
+      sub = { key: `${sec.key}_sub${sec.subs.length}`, id: subId, title: subTitle, rules: [], mb: subMb, ml: subMl };
       sec.subs.push(sub);
     }
     if (sub) sub.rules.push({ b, i });
@@ -410,15 +428,20 @@ function matchBlock(b: FilterBlock, q: string): boolean {
 
 const EMPTY_LIST = '<div class="filt-empty">查無符合的規則。</div>';
 
-/** 樹節點標頭（區段/子段共用），sub 走較淺樣式 + 縮排。 */
-function nodeHeader(key: string, id: string, title: string, cnt: string, open: boolean, sub: boolean): string {
+/** 樹節點標頭（區段/子段共用），sub 走較淺樣式 + 縮排。有標記位置者標題可就地編輯。 */
+function nodeHeader(node: TreeSec | TreeSub, cnt: string, open: boolean, sub: boolean): string {
   const cls = sub ? "filt-sec-hd filt-sub-hd" : "filt-sec-hd";
   const indent = sub ? ' style="margin-left:14px;"' : "";
-  const idTag = id ? `<span class="filt-sec-id">${esc(id)}</span>` : "";
+  const idTag = node.id ? `<span class="filt-sec-id">${esc(node.id)}</span>` : "";
+  // 有標記位置（mb/ml）才可編輯標題（更新該註解行）；「未分節」無標記不可編輯。
+  const editable =
+    node.mb !== undefined && node.ml !== undefined
+      ? ` contenteditable="true" spellcheck="false" data-rename-marker="${esc(node.mb)}|${node.ml}"`
+      : "";
   return `
-    <div class="${cls} ${open ? "open" : ""}" data-node="${key}"${indent}>
+    <div class="${cls} ${open ? "open" : ""}" data-node="${node.key}"${indent}>
       <span class="filt-sec-arrow">${open ? "▾" : "▸"}</span>
-      ${idTag}<span class="filt-sec-name">${esc(title)}</span>
+      ${idTag}<span class="filt-sec-name"${editable}>${esc(node.title)}</span>
       <span class="filt-sec-cnt">${cnt}</span>
     </div>`;
 }
@@ -449,7 +472,7 @@ function listHtml(): string {
 
     const open = searching || expanded.has(sec.key);
     const cnt = searching && matchCount !== total ? `${matchCount}/${total}` : `${total}`;
-    out.push(nodeHeader(sec.key, sec.id, sec.title, cnt, open, false));
+    out.push(nodeHeader(sec, cnt, open, false));
     if (!open) continue;
 
     for (const r of looseM) out.push(blockCard(r.b, r.i, 14));
@@ -457,7 +480,7 @@ function listHtml(): string {
       if (searching && rules.length === 0) continue;
       const subOpen = searching || expanded.has(su.key);
       const scnt = searching && rules.length !== su.rules.length ? `${rules.length}/${su.rules.length}` : `${su.rules.length}`;
-      out.push(nodeHeader(su.key, su.id, su.title, scnt, subOpen, true));
+      out.push(nodeHeader(su, scnt, subOpen, true));
       if (!subOpen) continue;
       for (const r of rules) out.push(blockCard(r.b, r.i, 28));
     }
@@ -492,18 +515,18 @@ function blockCard(b: FilterBlock, i: number, indent = 0): string {
   const actCls = b.action === "Show" ? "show" : "hide";
   const actZh =
     b.action === "Show" ? "顯示" : b.action === "Hide" ? "隱藏" : "精簡";
-  const title = esc(cardTitle(b));
   const ind = indent ? ` style="margin-left:${indent}px;"` : "";
   const body = isOpen
     ? condEditor(b)
     : `<div class="filt-card-sum">${condSummary(b)}</div>`;
   return `
-    <div class="filt-card ${isOpen ? "on" : ""} ${isSel ? "sel" : ""} ${off}" data-pick="${b.id}"${ind}>
+    <div class="filt-card ${isOpen ? "on" : ""} ${isSel ? "sel" : ""} ${off}" data-pick="${b.id}" data-drop="${b.id}"${ind}>
       <div class="filt-card-top">
+        <span class="filt-grip" draggable="true" data-drag="${b.id}" title="拖曳排序">⠿</span>
         <span class="filt-card-arrow">${isOpen ? "▾" : "▸"}</span>
         <span class="filt-badge ${actCls}">${actZh}</span>
         <span class="filt-swatch" style="${swatchStyle(b.style)}"></span>
-        <span class="filt-card-name">${title}</span>
+        <span class="filt-card-name" contenteditable="true" spellcheck="false" data-rename-block="${b.id}" data-ph="${esc(derivedTitle(b))}">${esc(b.title ?? "")}</span>
         <span class="filt-card-ord">${i + 1}</span>
       </div>
       ${body}
@@ -622,7 +645,7 @@ function lookEditor(b: FilterBlock): string {
   ).join("");
   return `
     <div class="filt-ed">
-      <div class="filt-prev big" id="ed-name" data-prev="${b.id}" contenteditable="true" spellcheck="false" style="${previewStyle(b.style)}" data-ph="${esc(cardTitle(b))}">${esc(b.name)}</div>
+      <div class="filt-prev big" id="ed-name" data-prev="${b.id}" contenteditable="true" spellcheck="false" style="${previewStyle(b.style)}" data-ph="${esc(derivedTitle(b))}">${esc(b.title ?? "")}</div>
 
       <div class="filt-sec-ttl">外觀</div>
       ${colorRow("文字顏色", "textColor", s)}
@@ -873,15 +896,18 @@ export const filter: View = {
       }
     });
 
-    // 基底 / 類別：可搜尋勾選下拉（內嵌、依 data-id+idx 定位）。
+    // 基底 / 類別：可搜尋勾選下拉。
     setupFieldPickers(root);
+    // 規則標題編輯（樹節點 + 預覽共用）、區段/子段標題編輯、拖曳排序。
+    setupTitleEditing(root);
+    setupDrag(root);
 
     if (!b) return;
 
-    // 預覽即規則名稱（可編輯）：輸入即更新 b.name。
+    // 右側預覽即規則顯示標題（可編輯）：輸入即更新 b.title。
     const edName = root.querySelector<HTMLElement>("#ed-name");
     edName?.addEventListener("input", () => {
-      b.name = (edName.textContent ?? "").trim();
+      b.title = (edName.textContent ?? "").trim() || undefined;
       persist();
       refreshOut(root);
     });
@@ -1111,8 +1137,8 @@ function bindListEvents(root: HTMLElement): void {
   root.querySelectorAll<HTMLElement>("[data-pick]").forEach((el) =>
     el.addEventListener("click", (e) => {
       const t = e.target as HTMLElement;
-      // 操作鈕、或點在展開後的內嵌條件編輯器內 → 不切換（避免重繪/失焦）。
-      if (t.closest("[data-act], .filt-ed")) return;
+      // 操作鈕 / 內嵌條件編輯器 / 拖曳握把 / 可編輯標題 → 不切換展開（避免重繪/失焦）。
+      if (t.closest("[data-act], .filt-ed, [data-drag], [contenteditable]")) return;
       const id = el.dataset["pick"]!;
       // 切換此規則的展開（多個可同時展開，互不關閉）；同時設為選中（右側外觀對應它）。
       if (expanded.has(id)) expanded.delete(id);
@@ -1141,15 +1167,78 @@ function bindListEvents(root: HTMLElement): void {
       rerender();
     }),
   );
-  // 節點展開 / 收合（區段 + 子段共用 data-node）
+  // 節點展開 / 收合（區段 + 子段共用 data-node）；點在可編輯標題上不觸發折疊。
   root.querySelectorAll<HTMLElement>("[data-node]").forEach((el) =>
-    el.addEventListener("click", () => {
+    el.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("[contenteditable]")) return;
       const key = el.dataset["node"]!;
       if (expanded.has(key)) expanded.delete(key);
       else expanded.add(key);
       refreshList(root);
     }),
   );
+}
+
+/** 規則標題（樹節點）與區段/子段標題就地編輯。 */
+function setupTitleEditing(root: HTMLElement): void {
+  // 規則節點標題 → b.title（空白＝清除，回退衍生標題）
+  root.querySelectorAll<HTMLElement>("[data-rename-block]").forEach((el) =>
+    el.addEventListener("blur", () => {
+      const bl = BLOCKS.find((x) => x.id === el.dataset["renameBlock"]);
+      if (!bl) return;
+      const t = (el.textContent ?? "").trim();
+      bl.title = t || undefined;
+      persist();
+      rerender();
+    }),
+  );
+  // 區段 / 子段標題 → 改寫該 [[NNNN]] / [NNNN] 標記註解行的標題（保留前綴）
+  root.querySelectorAll<HTMLElement>("[data-rename-marker]").forEach((el) =>
+    el.addEventListener("blur", () => {
+      const [mb, mlStr] = (el.dataset["renameMarker"] ?? "").split("|");
+      const ml = Number(mlStr);
+      const bl = BLOCKS.find((x) => x.id === mb);
+      if (!bl?.comments || bl.comments[ml] === undefined) return;
+      const t = (el.textContent ?? "").trim();
+      bl.comments[ml] = bl.comments[ml]!.replace(/^(#+\s*\[\[?\d+\]\]?\s*).*$/, `$1${t}`);
+      persist();
+      rerender();
+    }),
+  );
+}
+
+/** 規則節點拖曳排序：把拖曳的規則移到放置目標規則之前（在 BLOCKS 中重排）。 */
+function setupDrag(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>("[data-drag]").forEach((g) =>
+    g.addEventListener("dragstart", (e) => {
+      const dt = (e as DragEvent).dataTransfer;
+      if (dt) {
+        dt.setData("text/plain", g.dataset["drag"]!);
+        dt.effectAllowed = "move";
+      }
+    }),
+  );
+  root.querySelectorAll<HTMLElement>("[data-drop]").forEach((card) => {
+    card.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      card.classList.add("drag-over");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+    card.addEventListener("drop", (e) => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      const fromId = (e as DragEvent).dataTransfer?.getData("text/plain");
+      const toId = card.dataset["drop"];
+      if (!fromId || !toId || fromId === toId) return;
+      const from = BLOCKS.findIndex((x) => x.id === fromId);
+      if (from < 0) return;
+      const [moved] = BLOCKS.splice(from, 1);
+      const to = BLOCKS.findIndex((x) => x.id === toId);
+      BLOCKS.splice(to, 0, moved!); // 插到目標規則之前
+      persist();
+      rerender();
+    });
+  });
 }
 
 // ── 讀取（匯入）行為 ──────────────────────────────────────────────────────────

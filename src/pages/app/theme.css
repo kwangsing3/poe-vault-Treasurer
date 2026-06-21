@@ -1213,6 +1213,43 @@ body {
 .filt-card.on .filt-ed {
   padding: 10px 2px 2px;
 }
+/* 拖曳握把 + 放置指示 */
+.filt-grip {
+  cursor: grab;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+.filt-grip:active {
+  cursor: grabbing;
+}
+.filt-card.drag-over {
+  border-top: 3px solid var(--ink);
+}
+/* 可編輯標題（規則節點 + 區段/子段）：點字才編輯，hover 提示 */
+.filt-card-name[contenteditable],
+.filt-sec-name[contenteditable] {
+  outline: none;
+  cursor: text;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+.filt-card-name[contenteditable]:hover,
+.filt-sec-name[contenteditable]:hover {
+  background: var(--panel-2);
+}
+.filt-card-name[contenteditable]:focus,
+.filt-sec-name[contenteditable]:focus {
+  box-shadow: 0 0 0 1.5px var(--ink) inset;
+  background: var(--panel);
+}
+/* 規則節點標題空白時，顯示衍生標題（data-ph）作為佔位 */
+.filt-card-name[contenteditable]:empty::before {
+  content: attr(data-ph);
+  opacity: 0.85;
+}
 .filt-main-bar {
   display: flex;
   align-items: center;

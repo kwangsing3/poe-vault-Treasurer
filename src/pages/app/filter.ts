@@ -40,6 +40,8 @@ export interface FilterBlock {
   enabled: boolean; // 關閉時序列化為註解
   conditions: Condition[];
   style: Style;
+  /** 使用者自訂的顯示標題（覆蓋衍生標題；僅 UI 顯示用，不寫入 .filter）。 */
+  title?: string | undefined;
   // ── 無損匯入用（手工新建的規則這些為 undefined）──────────────────────────
   comments?: string[] | undefined; // 區塊前的原始註解行（含 #=== 分節標記），原樣保留
   headerComment?: string | undefined; // 標頭行尾註解，如 `Show # %D8 $type->6l`（FilterBlade 標記），原樣保留
