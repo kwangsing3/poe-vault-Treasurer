@@ -535,9 +535,8 @@ function condRow(c: Condition, idx: number, d: string): string {
         `<option value="${o}" ${o === c.op ? "selected" : ""}>${o || "包含"}</option>`,
     )
     .join("");
-  // 值欄：Rarity / 布林 → 下拉；BaseType / Class → 文字 + 可搜尋勾選下拉；其餘 → 文字
+  // 值欄：Rarity / 布林 → 下拉；BaseType / Class → 文字 + ▾ 浮動搜尋勾選下拉；其餘 → 文字
   let valInput: string;
-  let pickPanel = "";
   if (c.field === "Rarity") {
     valInput = `<select class="filt-in" data-cond="val" ${da}>${RARITIES.map(
       (r) =>
@@ -550,7 +549,6 @@ function condRow(c: Condition, idx: number, d: string): string {
   } else if (c.field === "BaseType" || c.field === "Class") {
     const label = c.field === "Class" ? "類別" : "基底";
     valInput = `<input class="filt-in" data-cond="val" ${da} value="${esc(c.value)}" placeholder="${label}（按 ▾ 搜尋勾選）" /><button type="button" class="filt-mini" data-fieldpick="${c.field}" ${da} title="搜尋並勾選${label}">▾</button>`;
-    pickPanel = `<div class="filt-pick" data-pickpanel="${d}-${idx}" hidden><input class="filt-pick-q" data-pickq="${d}-${idx}" type="search" placeholder="搜尋${label}（中／英）…" /><div class="filt-pick-list" data-picklist="${d}-${idx}"></div></div>`;
   } else {
     valInput = `<input class="filt-in" data-cond="val" ${da} value="${esc(c.value)}" placeholder="值（字串請加引號）" />`;
   }
@@ -560,8 +558,7 @@ function condRow(c: Condition, idx: number, d: string): string {
       <select class="filt-in narrow" data-cond="op" ${da}>${opOpts}</select>
       ${valInput}
       <button class="filt-mini danger" data-cond="del" ${da} title="移除條件">✕</button>
-    </div>
-    ${pickPanel}`;
+    </div>`;
 }
 
 // ── 編輯器：樣式列（顏色） ─────────────────────────────────────────────────────
@@ -983,66 +980,92 @@ function pickOpts(field: string): Opt[] {
   return baseOptsCache;
 }
 
-/** 內嵌的可搜尋「勾選」下拉：為每個 BaseType / Class 條件掛上搜尋框 + 勾選清單。
- *  勾選＝把英文值（加引號）加入該條件值；取消＝移除。多選、即時更新輸入框/原始碼。 */
+/** 浮動的可搜尋「勾選」下拉（點 ▾ 浮出，蓋在內容上）：BaseType / Class 共用一個 popup。
+ *  勾選＝把英文值（加引號）加入該條件值；取消＝移除。多選、即時更新輸入框/原始碼。
+ *  掛到 document.body + position:fixed，避免被面板 overflow 裁切或定位錯誤。 */
 function setupFieldPickers(root: HTMLElement): void {
-  root.querySelectorAll<HTMLElement>("[data-fieldpick]").forEach((trigger) => {
+  document.querySelectorAll(".base-pop").forEach((e) => e.remove()); // 清掉上一輪殘留
+  const triggers = root.querySelectorAll<HTMLElement>("[data-fieldpick]");
+  if (!triggers.length) return;
+
+  const pop = document.createElement("div");
+  pop.className = "base-pop";
+  pop.style.display = "none";
+  pop.innerHTML = `<input class="base-pop-q" type="search" placeholder="搜尋（中／英）…" /><div class="base-pop-list"></div>`;
+  document.body.appendChild(pop);
+  const q = pop.querySelector<HTMLInputElement>(".base-pop-q")!;
+  const listEl = pop.querySelector<HTMLElement>(".base-pop-list")!;
+  let active: { cond: Condition; bl: FilterBlock; d: string; idx: number; field: string } | null = null;
+
+  const render = (): void => {
+    if (!active) return;
+    const term = q.value.trim().toLowerCase();
+    const chosen = new Set(tokenizeValues(active.cond.value));
+    const matched = (term ? pickOpts(active.field).filter((o) => o.hay.includes(term)) : pickOpts(active.field)).slice(0, 80);
+    listEl.innerHTML = matched.length
+      ? matched
+          .map(
+            (o) =>
+              `<label class="filt-pick-opt"><input type="checkbox" data-en="${esc(o.en)}" ${chosen.has(o.en) ? "checked" : ""}/><span class="zh">${esc(o.zh)}</span><span class="en">${esc(o.en)}</span></label>`,
+          )
+          .join("")
+      : '<div class="base-pop-empty">查無項目</div>';
+    listEl.querySelectorAll<HTMLInputElement>("input[data-en]").forEach((cb) =>
+      cb.addEventListener("change", () => toggleVal(cb.dataset["en"]!, cb.checked)),
+    );
+  };
+  const toggleVal = (en: string, on: boolean): void => {
+    if (!active) return;
+    const set = new Set(tokenizeValues(active.cond.value));
+    if (on) set.add(en);
+    else set.delete(en);
+    active.cond.value = [...set].map((t) => `"${t}"`).join(" ");
+    const input = root.querySelector<HTMLInputElement>(`input[data-cond="val"][data-id="${active.d}"][data-idx="${active.idx}"]`);
+    if (input) input.value = active.cond.value;
+    const ed = root.querySelector<HTMLElement>("#ed-name");
+    if (ed && selectedId === active.d) ed.setAttribute("data-ph", cardTitle(active.bl));
+    persist();
+    refreshOut(root);
+  };
+
+  const onDocDown = (e: MouseEvent): void => {
+    const t = e.target as HTMLElement;
+    if (!pop.contains(t) && !t.closest("[data-fieldpick]")) close();
+  };
+  const close = (): void => {
+    pop.style.display = "none";
+    active = null;
+    document.removeEventListener("mousedown", onDocDown);
+  };
+  const open = (trigger: HTMLElement): void => {
     const d = trigger.dataset["id"]!;
     const idx = Number(trigger.dataset["idx"]);
-    const field = trigger.dataset["fieldpick"]!;
-    const key = `${d}-${idx}`;
-    const panel = root.querySelector<HTMLElement>(`[data-pickpanel="${key}"]`);
-    const q = root.querySelector<HTMLInputElement>(`[data-pickq="${key}"]`);
-    const listEl = root.querySelector<HTMLElement>(`[data-picklist="${key}"]`);
     const bl = BLOCKS.find((x) => x.id === d);
     const cond = bl?.conditions[idx];
-    if (!panel || !q || !listEl || !cond) return;
+    if (!bl || !cond) return;
+    active = { cond, bl, d, idx, field: trigger.dataset["fieldpick"]! };
+    pop.style.display = "flex";
+    const r = trigger.getBoundingClientRect();
+    pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 308))}px`;
+    pop.style.top = `${Math.min(r.bottom + 4, window.innerHeight - 360)}px`;
+    q.value = "";
+    render();
+    q.focus();
+    document.addEventListener("mousedown", onDocDown);
+  };
 
-    const apply = (): void => {
-      const input = root.querySelector<HTMLInputElement>(`input[data-cond="val"][data-id="${d}"][data-idx="${idx}"]`);
-      if (input) input.value = cond.value;
-      const ed = root.querySelector<HTMLElement>("#ed-name");
-      if (ed && selectedId === d) ed.setAttribute("data-ph", cardTitle(bl!));
-      persist();
-      refreshOut(root);
-    };
-    const toggleVal = (en: string, on: boolean): void => {
-      const set = new Set(tokenizeValues(cond.value));
-      if (on) set.add(en);
-      else set.delete(en);
-      cond.value = [...set].map((t) => `"${t}"`).join(" ");
-      apply();
-    };
-    const render = (): void => {
-      const term = q.value.trim().toLowerCase();
-      const chosen = new Set(tokenizeValues(cond.value));
-      const opts = pickOpts(field);
-      const matched = (term ? opts.filter((o) => o.hay.includes(term)) : opts).slice(0, 80);
-      listEl.innerHTML = matched.length
-        ? matched
-            .map(
-              (o) =>
-                `<label class="filt-pick-opt"><input type="checkbox" data-en="${esc(o.en)}" ${chosen.has(o.en) ? "checked" : ""}/><span class="zh">${esc(o.zh)}</span><span class="en">${esc(o.en)}</span></label>`,
-            )
-            .join("")
-        : '<div class="base-pop-empty">查無項目</div>';
-      listEl.querySelectorAll<HTMLInputElement>("input[data-en]").forEach((cb) =>
-        cb.addEventListener("change", () => toggleVal(cb.dataset["en"]!, cb.checked)),
-      );
-    };
-
-    q.addEventListener("input", render);
-    trigger.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const show = panel.hidden;
-      panel.hidden = !show;
-      if (show) {
-        q.value = "";
-        render();
-        q.focus();
-      }
-    });
+  q.addEventListener("input", render);
+  q.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close();
   });
+  triggers.forEach((t) =>
+    t.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const same = active && active.d === t.dataset["id"] && active.idx === Number(t.dataset["idx"]);
+      if (pop.style.display !== "none" && same) close();
+      else open(t);
+    }),
+  );
 }
 
 /** 只刷新預覽標籤（顏色/字級即時），避免整頁重繪導致輸入失焦。 */
