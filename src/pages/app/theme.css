@@ -1222,11 +1222,21 @@ body {
   flex-shrink: 0;
   user-select: none;
 }
+.filt-grip {
+  touch-action: none; /* pointer 拖曳：避免觸控捲動搶事件 */
+}
 .filt-grip:active {
   cursor: grabbing;
 }
-.filt-card.drag-over {
-  border-top: 3px solid var(--ink);
+.filt-card.dragging {
+  opacity: 0.45;
+}
+/* 插入線：拖曳時顯示落點在目標卡的上方 / 下方 */
+.filt-card.drop-before {
+  box-shadow: 0 -3px 0 0 var(--ink);
+}
+.filt-card.drop-after {
+  box-shadow: 0 3px 0 0 var(--ink);
 }
 /* 可編輯標題（規則節點 + 區段/子段）：點字才編輯，hover 提示 */
 .filt-card-name[contenteditable],

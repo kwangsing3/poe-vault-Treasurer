@@ -522,7 +522,7 @@ function blockCard(b: FilterBlock, i: number, indent = 0): string {
   return `
     <div class="filt-card ${isOpen ? "on" : ""} ${isSel ? "sel" : ""} ${off}" data-pick="${b.id}" data-drop="${b.id}"${ind}>
       <div class="filt-card-top">
-        <span class="filt-grip" draggable="true" data-drag="${b.id}" title="拖曳排序">⠿</span>
+        <span class="filt-grip" data-drag="${b.id}" title="拖曳排序">⠿</span>
         <span class="filt-card-arrow">${isOpen ? "▾" : "▸"}</span>
         <span class="filt-badge ${actCls}">${actZh}</span>
         <span class="filt-swatch" style="${swatchStyle(b.style)}"></span>
@@ -1207,34 +1207,53 @@ function setupTitleEditing(root: HTMLElement): void {
   );
 }
 
-/** 規則節點拖曳排序：把拖曳的規則移到放置目標規則之前（在 BLOCKS 中重排）。 */
+/** 規則節點拖曳排序（pointer 驅動 + 插入線）：依游標在目標卡上/下半，插到其前/後。 */
 function setupDrag(root: HTMLElement): void {
-  root.querySelectorAll<HTMLElement>("[data-drag]").forEach((g) =>
-    g.addEventListener("dragstart", (e) => {
-      const dt = (e as DragEvent).dataTransfer;
-      if (dt) {
-        dt.setData("text/plain", g.dataset["drag"]!);
-        dt.effectAllowed = "move";
-      }
-    }),
-  );
-  root.querySelectorAll<HTMLElement>("[data-drop]").forEach((card) => {
-    card.addEventListener("dragover", (e) => {
+  let dragId: string | null = null;
+  let targetCard: HTMLElement | null = null;
+  let where: "before" | "after" = "before";
+  const clear = (): void =>
+    root.querySelectorAll<HTMLElement>(".drop-before, .drop-after").forEach((e) => e.classList.remove("drop-before", "drop-after"));
+
+  root.querySelectorAll<HTMLElement>("[data-drag]").forEach((grip) => {
+    grip.addEventListener("pointerdown", (e) => {
       e.preventDefault();
-      card.classList.add("drag-over");
+      const card = grip.closest<HTMLElement>("[data-drop]");
+      dragId = card?.dataset["drop"] ?? null;
+      if (!dragId) return;
+      grip.setPointerCapture(e.pointerId);
+      card?.classList.add("dragging");
     });
-    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
-    card.addEventListener("drop", (e) => {
-      e.preventDefault();
-      card.classList.remove("drag-over");
-      const fromId = (e as DragEvent).dataTransfer?.getData("text/plain");
-      const toId = card.dataset["drop"];
-      if (!fromId || !toId || fromId === toId) return;
+    grip.addEventListener("pointermove", (e) => {
+      if (!dragId) return;
+      const under = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      const card = under?.closest<HTMLElement>("[data-drop]") ?? null;
+      clear();
+      if (card && card.dataset["drop"] !== dragId) {
+        const r = card.getBoundingClientRect();
+        where = e.clientY < r.top + r.height / 2 ? "before" : "after";
+        card.classList.add(where === "before" ? "drop-before" : "drop-after");
+        targetCard = card;
+      } else {
+        targetCard = null;
+      }
+    });
+    grip.addEventListener("pointerup", (e) => {
+      if (!dragId) return;
+      grip.releasePointerCapture(e.pointerId);
+      grip.closest<HTMLElement>("[data-drop]")?.classList.remove("dragging");
+      const toId = targetCard?.dataset["drop"];
+      const fromId = dragId;
+      dragId = null;
+      targetCard = null;
+      clear();
+      if (!toId || toId === fromId) return;
       const from = BLOCKS.findIndex((x) => x.id === fromId);
       if (from < 0) return;
       const [moved] = BLOCKS.splice(from, 1);
-      const to = BLOCKS.findIndex((x) => x.id === toId);
-      BLOCKS.splice(to, 0, moved!); // 插到目標規則之前
+      let to = BLOCKS.findIndex((x) => x.id === toId);
+      if (where === "after") to += 1;
+      BLOCKS.splice(to, 0, moved!);
       persist();
       rerender();
     });
