@@ -101,9 +101,11 @@ function styleLines(s: Style): string[] {
 /** 單一區塊 → .filter 文字（停用時整塊以 # 註解）。 */
 export function serializeBlock(b: FilterBlock): string {
   const lines: string[] = [];
-  // 匯入的原始註解（含分節標記）優先；否則用手工規則名當註解。
+  // 匯入的原始註解（含分節標記）先輸出，保留分節結構。
   if (b.comments?.length) lines.push(...b.comments);
-  else if (b.name) lines.push(`# ${b.name}`);
+  // 使用者自訂的規則標題 → 寫成緊鄰標頭的註解（讓編輯反映到匯出原始碼）。
+  if (b.title?.trim()) lines.push(`# ${b.title.trim()}`);
+  else if (!b.comments?.length && b.name) lines.push(`# ${b.name}`); // 手工規則退回規則名
   lines.push(b.headerComment ? `${b.action} ${b.headerComment}` : b.action);
   for (const c of b.conditions) {
     if (!c.field) continue;
