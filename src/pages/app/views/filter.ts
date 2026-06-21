@@ -433,9 +433,9 @@ function nodeHeader(node: TreeSec | TreeSub, cnt: string, open: boolean, sub: bo
   const cls = sub ? "filt-sec-hd filt-sub-hd" : "filt-sec-hd";
   const indent = sub ? ' style="margin-left:14px;"' : "";
   const idTag = node.id ? `<span class="filt-sec-id">${esc(node.id)}</span>` : "";
-  // 有標記位置（mb/ml）才可編輯標題（更新該註解行）；「未分節」無標記不可編輯。
+  // 僅在展開狀態、且有標記位置（mb/ml）時標題可編輯；收合時為純文字（點擊＝展開）。
   const editable =
-    node.mb !== undefined && node.ml !== undefined
+    open && node.mb !== undefined && node.ml !== undefined
       ? ` contenteditable="true" spellcheck="false" data-rename-marker="${esc(node.mb)}|${node.ml}"`
       : "";
   return `
@@ -526,7 +526,11 @@ function blockCard(b: FilterBlock, i: number, indent = 0): string {
         <span class="filt-card-arrow">${isOpen ? "▾" : "▸"}</span>
         <span class="filt-badge ${actCls}">${actZh}</span>
         <span class="filt-swatch" style="${swatchStyle(b.style)}"></span>
-        <span class="filt-card-name" contenteditable="true" spellcheck="false" data-rename-block="${b.id}" data-ph="${esc(derivedTitle(b))}">${esc(b.title ?? "")}</span>
+        ${
+          isOpen
+            ? `<span class="filt-card-name" contenteditable="true" spellcheck="false" data-rename-block="${b.id}" data-ph="${esc(derivedTitle(b))}">${esc(b.title ?? "")}</span>`
+            : `<span class="filt-card-name">${esc(cardTitle(b))}</span>`
+        }
         <span class="filt-card-ord">${i + 1}</span>
       </div>
       ${body}
