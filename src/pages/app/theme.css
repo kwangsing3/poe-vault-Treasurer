@@ -1443,6 +1443,14 @@ body {
   color: var(--muted-2);
   word-break: break-word;
 }
+/* 樹葉的小色塊（取代肥大的預覽標籤；預覽本體在編輯器） */
+.filt-swatch {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+}
 .filt-adv {
   display: inline-block;
   font: 600 10px/1 var(--sans);

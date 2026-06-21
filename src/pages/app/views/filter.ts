@@ -260,6 +260,13 @@ function previewStyle(s: Style): string {
   return `color:${text};border:2px solid ${border};background:${bg};font-size:${px}px;`;
 }
 
+/** 樹葉小色塊：用規則的邊框/背景色當識別提示（預覽本體已移到編輯器）。 */
+function swatchStyle(s: Style): string {
+  const border = s.borderColor ? rgbToHex(s.borderColor) : "var(--line-2)";
+  const bg = s.bgColor ? rgbToHex(s.bgColor) : "transparent";
+  return `background:${bg};border:1.5px solid ${border};`;
+}
+
 function condSummary(b: FilterBlock): string {
   const extra = b.unknown?.length
     ? `<span class="filt-adv">+${b.unknown.length} 進階</span>`
@@ -490,10 +497,10 @@ function blockCard(b: FilterBlock, i: number, indent = 0): string {
     <div class="filt-card ${sel} ${off}" data-pick="${b.id}"${ind}>
       <div class="filt-card-top">
         <span class="filt-badge ${actCls}">${actZh}</span>
+        <span class="filt-swatch" style="${swatchStyle(b.style)}"></span>
         <span class="filt-card-name">${title}</span>
         <span class="filt-card-ord">${i + 1}</span>
       </div>
-      <div class="filt-prev" data-prev="${b.id}" style="${previewStyle(b.style)}">${title}</div>
       <div class="filt-card-sum">${condSummary(b)}</div>
       <div class="filt-card-acts">
         <button class="filt-mini" data-act="up" data-id="${b.id}" title="上移">▲</button>
@@ -571,6 +578,7 @@ function editor(b: FilterBlock): string {
   ).join("");
   return `
     <div class="filt-ed">
+      <div class="filt-prev big" data-prev="${b.id}" style="${previewStyle(b.style)}">${esc(cardTitle(b))}</div>
       <div class="filt-ed-head">
         <input class="filt-in grow" id="ed-name" value="${esc(b.name)}" placeholder="規則名稱" />
         <div class="filt-seg">
