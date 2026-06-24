@@ -11,6 +11,16 @@ contextBridge.exposeInMainWorld('poe', {
   getCurrencyPrice: (league: string, want: string, have?: string) =>
     ipcRenderer.invoke('poe:currencyPrice', league, want, have),
   getCurrencyCodes: () => ipcRenderer.invoke('poe:currencyCodes'),
+  setRateLimit: (perMinute: number) => ipcRenderer.invoke('poe:setRateLimit', perMinute),
+});
+
+// 中央價格指數後台（poe-coco-priceindex）橋接：查聚合最新價 + 詢價派工代行。
+contextBridge.exposeInMainWorld('index', {
+  query: (league: string, items: unknown[]) =>
+    ipcRenderer.invoke('index:query', league, items),
+  startDispatch: (reporterId: string, league: string) =>
+    ipcRenderer.invoke('index:startDispatch', reporterId, league),
+  stopDispatch: () => ipcRenderer.invoke('index:stopDispatch'),
 });
 
 // 帳號連結（OAuth）橋接。

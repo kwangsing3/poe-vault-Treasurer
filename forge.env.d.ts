@@ -79,6 +79,34 @@ interface PoeBridge {
   ): Promise<PoePriceQuote | null>;
   /** 通貨名稱 → trade code 對照（供 renderer 解析倉庫通貨名）。 */
   getCurrencyCodes(): Promise<Record<string, string>>;
+  /** 設定官方查價的使用者額外速率上限（件/分鐘）；<=0 取消額外限制。 */
+  setRateLimit(perMinute: number): Promise<void>;
+}
+
+// 中央價格指數後台（poe-coco-priceindex）橋接。型別鏡像自 src/api/priceIndex.ts。
+interface IndexQueryItem {
+  category: "unique" | "card" | "currency";
+  name: string;
+  baseType?: string;
+}
+interface IndexQuote {
+  identityKey: string;
+  chaos: number | null;
+  divine: number | null;
+  sampleSize: number;
+  confidence?: "high" | "medium" | "low";
+  updatedAt?: string | null;
+  ageSeconds?: number | null;
+  icon?: string;
+  reason?: string;
+}
+interface IndexBridge {
+  /** 批次查聚合最新價；結果順序對齊 items。後台離線回 null（呼叫端據此 fallback 官方查價）。 */
+  query(league: string, items: IndexQueryItem[]): Promise<IndexQuote[] | null>;
+  /** 啟動詢價派工代行（領工→官方查價→回報）；會先停掉前一個迴圈。 */
+  startDispatch(reporterId: string, league: string): Promise<void>;
+  /** 停止詢價派工代行。 */
+  stopDispatch(): Promise<void>;
 }
 
 // preload 橋接的估價 shape；須與 src/shared/priceQuote.ts 的 PriceQuote/PriceListing 保持一致
@@ -135,6 +163,7 @@ interface DebugBridge {
 }
 interface Window {
   poe: PoeBridge;
+  index: IndexBridge;
   win: WinBridge;
   auth: AuthBridge;
   debug: DebugBridge;

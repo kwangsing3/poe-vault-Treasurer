@@ -150,14 +150,35 @@ async function worker(): Promise<void> {
   }
 }
 
+/** 把指數伺服器回的聚合報價映射成本地 PriceData（無逐筆掛單；updatedAt → fetchedAt）。 */
+function quoteFromIndex(q: IndexQuote): PriceData {
+  const ts = q.updatedAt ? Date.parse(q.updatedAt) : NaN;
+  return {
+    chaos: q.chaos,
+    divine: q.divine,
+    fetchedAt: Number.isFinite(ts) ? ts : Date.now(),
+    sampleSize: q.sampleSize,
+    listings: [], // 指數來源不含逐筆掛單；要明細可點「重新查價」走官方。
+  };
+}
+
+/** 是否仍需要官方查價（無快取 / 未知 / 已過期才需要）。 */
+function needsOfficial(key: string): boolean {
+  const c = cache.get(key);
+  return !(c !== undefined && c !== 'loading' && c !== 'unknown' && isFresh(c));
+}
+
 /**
- * 載入並背景估價當前聯盟的傳奇物品。
- * 先用 localStorage 既有價格填滿快取（開啟即有資料、不空白），再把需要查價的排入佇列：
- * 「尚無估價」者優先，其後接「已過期」者（依上次查價時間由舊到新）。新價格寫回 localStorage。
+ * 載入並估價當前聯盟的傳奇物品。
+ * 流程（指數優先）：
+ *   1) 用 localStorage 既有價格填滿快取（開啟即有資料、不空白）。
+ *   2) 批次向指數伺服器查聚合最新價，命中者直接填入快取（快、免打官方）。
+ *   3) 指數查無資料（no-data）或伺服器離線者，才 fallback 排入官方查價佇列（仍新鮮者略過）。
  */
 export function loadUniquePrices(league: string): void {
   activeRun++; // 作廢前一聯盟進行中的結果
   activeLeague = league;
+  const run = activeRun;
   queue = [];
   queued.clear();
 
@@ -165,33 +186,96 @@ export function loadUniquePrices(league: string): void {
   cache.clear();
   for (const [key, data] of Object.entries(persisted[league] ?? {})) cache.set(key, data);
 
-  // 排入需要查價的傳奇，並排定優先序：
-  //   1) 尚無估價（從未查過）的優先查；
-  //   2) 已過期的排在後面，依「上次查價時間」由舊到新（最久沒更新的先補）。
+  // 蒐集本聯盟可查價的傳奇（去重；過濾未鑑定 / 無名變體）。
   const seen = new Set<string>();
-  const noPrice: StashItem[] = [];
-  const expired: { it: StashItem; fetchedAt: number }[] = [];
+  const targets: { key: string; queryName: string; base: string }[] = [];
   for (const it of STASH_ITEMS) {
     if (it.rarity !== 'unique') continue; // 只估傳奇；通貨等之後再處理
-    if (priceQueryName(it.name, it.base) === null) continue; // 未鑑定 / 無名變體：無法查名，略過（見 TRADE-SEARCH-GUIDE.md）
+    const queryName = priceQueryName(it.name, it.base);
+    if (queryName === null) continue; // 未鑑定 / 無名變體：無法查名，略過（見 TRADE-SEARCH-GUIDE.md）
     const key = priceKey(it);
     if (seen.has(key)) continue;
     seen.add(key);
-    const cached = cache.get(key);
-    if (cached === undefined || cached === 'unknown') {
-      noPrice.push(it); // 尚無估價
-    } else if (cached !== 'loading' && !isFresh(cached)) {
-      expired.push({ it, fetchedAt: cached.fetchedAt }); // 有舊價但已過期
-    }
-    // 仍新鮮或查價中 → 不重排
+    targets.push({ key, queryName, base: it.base });
   }
-  // 過期者依上次查價時間由舊到新（最久未更新的排前面）。
-  expired.sort((a, b) => a.fetchedAt - b.fetchedAt);
 
-  // enqueue 用「正規化後的查詢名」（已在上方過濾掉 null 者）。
-  for (const it of noPrice) enqueue(priceQueryName(it.name, it.base)!, it.base, false);
-  for (const e of expired) enqueue(priceQueryName(e.it.name, e.it.base)!, e.it.base, false);
+  void fillFromIndex(league, targets, run);
+}
+
+/** 向指數伺服器批次查價填入快取；no-data / 離線者 fallback 官方查價。 */
+async function fillFromIndex(
+  league: string,
+  targets: { key: string; queryName: string; base: string }[],
+  run: number,
+): Promise<void> {
+  if (targets.length === 0) return;
+  let results: IndexQuote[] | null = null;
+  try {
+    results = await window.index?.query(
+      league,
+      targets.map((t) => ({ category: 'unique', name: t.queryName, baseType: t.base })),
+    ) ?? null;
+  } catch {
+    results = null;
+  }
+  if (run !== activeRun) return; // 已切聯盟：作廢
+
+  if (!results) {
+    // 指數伺服器離線：全部 fallback 官方查價（仍新鮮者略過）。
+    for (const t of targets) if (needsOfficial(t.key)) enqueue(t.queryName, t.base, false);
+    kick();
+    return;
+  }
+
+  // 結果順序對齊 targets：有資料填快取、no-data 留給官方 fallback。
+  const need: typeof targets = [];
+  results.forEach((r, i) => {
+    const t = targets[i];
+    if (!t) return;
+    if (r && !r.reason && (r.chaos !== null || r.divine !== null)) {
+      const data = quoteFromIndex(r);
+      cache.set(t.key, data);
+      (persisted[league] ??= {})[t.key] = data;
+      resolveHook?.(t.key);
+    } else if (needsOfficial(t.key)) {
+      need.push(t);
+    }
+  });
+  savePersistedSoon();
+  for (const t of need) enqueue(t.queryName, t.base, false);
   kick();
+}
+
+// ── 指數伺服器：回報者身分 / 速率上限 / 貢獻派工 ─────────────────────────────
+const REPORTER_KEY = 'poe-reporter-id';
+
+/** 取得（或首次產生並持久化）本 client 的回報者 ID。租約與信譽都靠它識別，需固定。 */
+export function getReporterId(): string {
+  let id = localStorage.getItem(REPORTER_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    try {
+      localStorage.setItem(REPORTER_KEY, id);
+    } catch {
+      /* 隱私模式：本次 session 用記憶體值即可 */
+    }
+  }
+  return id;
+}
+
+/** 套用官方查價的使用者速率上限（件/分鐘）到主進程；<=0 取消額外限制。 */
+export function applyOfficialRateLimit(perMinute: number): void {
+  void window.poe?.setRateLimit(perMinute);
+}
+
+/** 啟用貢獻：對指定聯盟啟動派工代行（領工→官方查價→回報）。會先停掉前一個迴圈。 */
+export function startContribution(league: string): void {
+  void window.index?.startDispatch(getReporterId(), league);
+}
+
+/** 停用貢獻：停止派工代行。 */
+export function stopContribution(): void {
+  void window.index?.stopDispatch();
 }
 
 /** 使用者主動查價：插到佇列最前、立即啟動 worker（即使已有新鮮價也重查並覆蓋）。 */

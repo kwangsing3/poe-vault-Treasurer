@@ -58,9 +58,12 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
   透過 `window.poe.getStash(tabIndex, league)` 逐頁載入並快取；`isGridTab()` 區分 2D 網格分頁
   （Quad/Normal/Premium）與特殊分頁（通貨/碎片…改 flow 排列）。資料源為 `mock/stash/get-stash-items-tab{0..35}.json`
   （真實回應；僅 `value` 為 mock）。**在做真正帳號連結前一律以這份 mock 為資料源。**
-- `prices.ts` — 傳奇估價（背景）：經 `window.poe.getItemPrice` 走 trade search，**取代表價**（價格分層；見 `api/priceStats.ts`），
-  同一次請求同時得混沌石 + 神聖石價。單一 worker 的**查價佇列**（支援插隊到最前）；價格依聯盟
-  存進 `localStorage`、超過 1 小時視為過期重查。
+- `prices.ts` — 傳奇估價（背景），**指數伺服器優先**：`loadUniquePrices()` 先批次向中央價格指數後台
+  （`window.index.query`，見下）拿聚合最新價填快取；查無（`no-data`）或伺服器離線者才 fallback 到
+  `window.poe.getItemPrice` 走官方 trade search（**取代表價**；價格分層見 `api/priceStats.ts`，同一次請求同時得
+  混沌石 + 神聖石價）。單一 worker 的**查價佇列**（支援插隊到最前）；價格依聯盟存進 `localStorage`、超過 1 小時
+  視為過期重查。另含**貢獻控制**：`getReporterId()`（固定 UUID 存 localStorage）、`applyOfficialRateLimit()`、
+  `startContribution()` / `stopContribution()`（起停指數伺服器的派工代行）。
 - `networth.ts` — 淨資產估值與走勢。`valuation()` **只計已估價真實資產**（目前=傳奇），每件只歸到
   「主流幣別」分別累加成混沌石/神聖石總額（不換算、不重複計），並產出分類小計。每小時對當前聯盟
   快照存 `localStorage`，最多保留 30 天、逾期丟棄（供報表走勢圖）。
@@ -134,15 +137,22 @@ PoE API 串接尚未開始。規劃方向見 README 的 roadmap。
 
 所有與官方 API 互動的入口都收斂在 `src/api/`（barrel 為 `index.ts`），於 **main 進程**執行、renderer 走 preload IPC：
 
-- `tradePrice.ts` — `getItemPrice`（物品走 `/api/trade/search` 兩段式：search → fetch）與
-  `getCurrencyPrice`（通貨走 `/api/trade/exchange`，**暫未從 UI 使用**）。實測這些端點**公開、免登入**即可查。
-  「有效價格」= 線上 + 即刻購買（`sale_type=priced`）+ 限定稀有度 → 同批掛單裡混沌石 / 神聖石**各別取代表價**。
-  **查價 `name` 須正規化**（剝除 `穢生 `／`mutated` 變體前綴、未鑑定/空名傳奇直接略過）否則回 `400`；
-  搜尋 request body ↔ 物品屬性的完整對照與修法見 [`TRADE-SEARCH-GUIDE.md`](./TRADE-SEARCH-GUIDE.md)。
-  代表價邏輯抽在純模組 `priceStats.ts`（`robustMedian`）：依 >2× 跳幅把同幣別買斷價分成「價格層」，取最密集那層的中位數
-  （平手取較便宜層），避開舊版「中位數±0.5x~2x」對雙峰偶數樣本的高估；測試見 `scripts/test-price-stats.mts`。
+- `tradePrice.ts` — `getItemPriceDetailed`（物品走 `/api/trade/search` 兩段式：search → fetch；回 quote + 原始
+  `icon` + 信任標頭 `officialHeaders`）與其精簡包裝 `getItemPrice`，以及 `getCurrencyPrice`（通貨走 `/api/trade/exchange`，
+  **暫未從 UI 使用**）。實測這些端點**公開、免登入**即可查。「有效價格」= 線上 + 即刻購買（`sale_type=priced`）+ 限定稀有度
+  → 同批掛單裡混沌石 / 神聖石**各別取代表價**。**查價 `name` 須正規化**（剝除 `穢生 `／`mutated` 變體前綴、未鑑定/空名傳奇
+  直接略過）否則回 `400`；命運卡以 type=卡名查（name 留空，query 不放 name）。搜尋 request body ↔ 物品屬性的完整對照與修法見
+  [`TRADE-SEARCH-GUIDE.md`](./TRADE-SEARCH-GUIDE.md)。代表價邏輯抽在純模組 `priceStats.ts`（`robustMedian`）：依 >2× 跳幅把
+  同幣別買斷價分成「價格層」，取最密集那層的中位數（平手取較便宜層）；測試見 `scripts/test-price-stats.mts`。
+  另導出 `setOfficialRateCap(perMin)` 供設定頁限制官方查價速率。
+- `priceIndex.ts` — **中央價格指數後台（[poe-coco-priceindex](https://github.com/kwangsing3/poe-coco-priceindex)）客戶端 + 詢價派工代行**。
+  位址**暫寫死 `http://localhost:3000`**。兩條路：①讀（顯示優先）`indexQuery` 批次拿聚合最新價，後台離線回 `null` 讓
+  renderer fallback 官方；②寫（貢獻）`startDispatch`/`stopDispatch` 常駐迴圈「`GET /v1/work/next` 領派工 → 用 `getItemPriceDetailed`
+  查官方 → `POST /v1/prices/report` 回報（自動釋放租約）」。**只處理 unique / card**，通貨由後台自輪詢、client 不上報。
+  正規化公式（剝 `穢生 ` 前綴）兩 repo 一致，故 `keyOf` 對得上。串接契約權威來源為該 repo 的 `TREASURER-INTEGRATION.md`。
 - `rateLimiter.ts` — per-policy 的請求佇列：多窗口滑動、依回應 `x-rate-limit-*` 標頭自我校正、429 退避。
-  search 與 exchange 各一個實例（policy 不同）。**串接官方 API 一律經此佇列**，勿直接打。
+  search 與 exchange 各一個實例（policy 不同）。**串接官方 API 一律經此佇列**，勿直接打。另支援
+  `setUserCap(windows)`：使用者自訂的額外上限（設定頁「官方查價上限 件/分鐘」），與官方窗口同時生效取最嚴者、不被自校正覆蓋。
 - `staticData.ts` — 由 `mock/trade-data/static.json` 建「通貨名稱 → trade code」對照（通貨估價用，之後接）。
 - `client.ts` — 共用 `User-Agent`（`OAuth poecoco/<version> (contact: …)`）與全域速率限制設定。
 

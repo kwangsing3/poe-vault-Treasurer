@@ -1,5 +1,11 @@
 import { formatStashTotal, loadLeagueVault } from "./stash";
-import { loadUniquePrices, setPriceResolveHook } from "./prices";
+import {
+  loadUniquePrices,
+  setPriceResolveHook,
+  applyOfficialRateLimit,
+  startContribution,
+  stopContribution,
+} from "./prices";
 import { scheduleSnapshots } from "./networth";
 import { esc } from "./html";
 import { initDebugPanel } from "./debugPanel";
@@ -209,8 +215,11 @@ export function syncLeague(force = false): void {
   void loadLeagueVault(store.league, force).then(() => {
     store.lastSync = Date.now();
     render();
-    // 背景估價：不阻塞 UI，價格陸續寫入快取（無 session 時一律「未知」）。
+    // 背景估價：不阻塞 UI，優先向指數伺服器查、查無才 fallback 官方。
     loadUniquePrices(store.league);
+    // 群眾外包貢獻：啟用時對當前聯盟（重）啟動派工代行；停用則停止。
+    if (store.contribute) startContribution(store.league);
+    else stopContribution();
     // 啟動每小時淨資產快照（用已載入的估價；切聯盟時更新對象）。
     scheduleSnapshots(store.league);
   });
@@ -243,6 +252,8 @@ export function start(root: HTMLElement): void {
     const btn = app.querySelector<HTMLElement>('[data-win="max"]');
     if (btn) btn.innerHTML = m ? ICON_RESTORE : ICON_MAX;
   });
+  // 啟動即把官方查價速率上限推給主進程（設定持久化於 localStorage）。
+  applyOfficialRateLimit(store.officialRateLimitPerMin);
   if (!location.hash) location.hash = "#/overview";
   render();
   void initDebugPanel(); // mode=debug 時掛上 API 請求顯示面板

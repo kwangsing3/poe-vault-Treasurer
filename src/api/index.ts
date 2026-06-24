@@ -9,3 +9,4 @@ export * from "./stash";
 export * from "./rateLimiter";
 export * from "./tradePrice";
 export * from "./staticData";
+export * from "./priceIndex";

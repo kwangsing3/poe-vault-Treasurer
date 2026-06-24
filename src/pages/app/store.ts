@@ -59,6 +59,38 @@ export interface AppState {
   account: string | null;
   /** 倉庫頁是否套用物品過濾器的顯示層效果（高亮/淡化；與遊戲無關） */
   filterApplied: boolean;
+  /** 是否參與群眾外包貢獻（向指數伺服器領派工 → 官方查價 → 回報） */
+  contribute: boolean;
+  /** 官方查價的使用者速率上限（件/分鐘）；<=0 表示不額外限制 */
+  officialRateLimitPerMin: number;
+}
+
+// 設定持久化（localStorage）：貢獻開關與官方查價速率上限。
+const CONTRIBUTE_KEY = 'poe-contribute';
+const RATE_KEY = 'poe-official-rpm';
+function loadContribute(): boolean {
+  const v = localStorage.getItem(CONTRIBUTE_KEY);
+  return v === null ? true : v === '1';
+}
+function loadRateLimit(): number {
+  const v = Number(localStorage.getItem(RATE_KEY));
+  return Number.isFinite(v) && v > 0 ? v : 10; // 預設保守 10 件/分鐘
+}
+/** 持久化貢獻開關。 */
+export function saveContribute(on: boolean): void {
+  try {
+    localStorage.setItem(CONTRIBUTE_KEY, on ? '1' : '0');
+  } catch {
+    /* 隱私模式忽略 */
+  }
+}
+/** 持久化官方查價速率上限。 */
+export function saveRateLimit(perMin: number): void {
+  try {
+    localStorage.setItem(RATE_KEY, String(perMin));
+  } catch {
+    /* 隱私模式忽略 */
+  }
 }
 
 /** 聯盟清單的離線後備（抓取失敗時使用） */
@@ -80,6 +112,8 @@ export const store: AppState = {
   authConnected: false,
   account: null,
   filterApplied: false,
+  contribute: loadContribute(),
+  officialRateLimitPerMin: loadRateLimit(),
 };
 
 /** 訂閱者：狀態變更後要重繪的回呼（由 router 註冊） */

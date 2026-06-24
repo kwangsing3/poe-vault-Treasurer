@@ -33,6 +33,9 @@ function parseWindows(header: string): Window[] {
  */
 export class RateLimiter {
   private windows: Window[];
+  // 使用者自訂的額外上限（設定頁可調）。永遠與 windows 一起檢查、不被 header 自校正覆蓋，
+  // 故只會讓佇列更保守（用來主動把官方查價壓在使用者願意承受的速率內）。空陣列＝不額外限制。
+  private userWindows: Window[] = [];
   private readonly log: number[] = []; // 過往請求的時間戳（ms，遞增）
   private pausedUntil = 0; // 429 退避：在此時間前不送出
   private tail: Promise<void> = Promise.resolve(); // 序列化用的鏈尾
@@ -40,6 +43,18 @@ export class RateLimiter {
   /** @param defaults 尚未收到標頭前的保守預設窗口。 */
   constructor(defaults: Window[]) {
     this.windows = defaults;
+  }
+
+  /** 設定使用者額外上限（與官方窗口同時生效，取最嚴者）。傳空陣列＝取消額外限制。 */
+  setUserCap(windows: Window[]): void {
+    this.userWindows = windows.filter((w) => w.hits > 0 && w.period > 0);
+  }
+
+  /** 官方（自校正）窗口 + 使用者上限的聯集；waitForSlot 對每個窗口都需滿足。 */
+  private effectiveWindows(): Window[] {
+    return this.userWindows.length > 0
+      ? [...this.windows, ...this.userWindows]
+      : this.windows;
   }
 
   /** 透過佇列送出一個請求。call 應回傳 http.mod 的 Result（內含 headers/status）。 */
@@ -68,15 +83,16 @@ export class RateLimiter {
         continue;
       }
 
+      const windows = this.effectiveWindows();
       // 修剪掉超出最長窗口的舊紀錄
-      const maxPeriodMs = Math.max(...this.windows.map((w) => w.period)) * 1000;
+      const maxPeriodMs = Math.max(...windows.map((w) => w.period)) * 1000;
       while (this.log.length > 0 && this.log[0]! <= now - maxPeriodMs) {
         this.log.shift();
       }
 
       // 取所有窗口中最久的等待時間
       let wait = 0;
-      for (const w of this.windows) {
+      for (const w of windows) {
         const windowStart = now - w.period * 1000;
         const inWindow = this.log.filter((t) => t > windowStart);
         if (inWindow.length >= w.hits) {

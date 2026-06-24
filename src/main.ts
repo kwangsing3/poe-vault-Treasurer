@@ -7,6 +7,11 @@ import {
   getItemPrice,
   getCurrencyPrice,
   currencyCodeByName,
+  setOfficialRateCap,
+  indexQuery,
+  startDispatch,
+  stopDispatch,
+  type IndexQueryItem,
 } from "./api";
 import { login as authLogin, logout as authLogout, getStatus as authStatus } from "./api/oauth";
 import { SetRequestObserver } from "./utility/http.mod";
@@ -54,6 +59,23 @@ ipcMain.handle(
 
 // 通貨名稱 → trade code 對照（renderer 解析倉庫通貨名以呼叫 currencyPrice）。
 ipcMain.handle("poe:currencyCodes", () => currencyCodeByName());
+
+// 官方查價的使用者額外速率上限（件/分鐘）：設定頁可調，<=0 取消。實作見 tradePrice.setOfficialRateCap。
+ipcMain.handle("poe:setRateLimit", (_event, perMinute: number) => {
+  setOfficialRateCap(perMinute);
+});
+
+// 指數伺服器（poe-coco-priceindex）：批次查聚合最新價（顯示優先用）。離線回 null。
+ipcMain.handle("index:query", (_event, league: string, items: IndexQueryItem[]) =>
+  indexQuery(league, items),
+);
+// 詢價派工代行：啟用貢獻 / 切聯盟時起迴圈（領工→官方查價→回報）；停用時停。
+ipcMain.handle("index:startDispatch", (_event, reporterId: string, league: string) => {
+  startDispatch(reporterId, league);
+});
+ipcMain.handle("index:stopDispatch", () => {
+  stopDispatch();
+});
 
 // 帳號連結（OAuth public client + PKCE + loopback）。token 僅留在主進程，不回傳給 renderer。
 ipcMain.handle("auth:login", () => authLogin());

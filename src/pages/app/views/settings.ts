@@ -2,8 +2,9 @@ import type { BaseCurrency } from '../data';
 import { STASH_ITEMS, STASH_TABS } from '../stash';
 import { relativeTime } from '../format';
 import { esc } from '../html';
-import { store, update } from '../store';
+import { store, update, saveContribute, saveRateLimit } from '../store';
 import { switchLeague, syncLeague } from '../router';
+import { applyOfficialRateLimit, startContribution, stopContribution } from '../prices';
 import type { View } from '../router';
 
 const CURRENCIES: { key: BaseCurrency; label: string }[] = [
@@ -17,8 +18,57 @@ function lastSyncText(ts: number | null): string {
   return ts === null ? '尚未同步' : relativeTime(ts);
 }
 
+// 「立即同步並清點」的冷卻：點擊後禁用 10 秒並在按鈕上倒數。冷卻時間戳存模組層，
+// 使狀態能跨頁面重繪存活（router 會在 store 變更 / 同步完成時整段重建 settings DOM）。
+const SYNC_LABEL = '立即同步並清點';
+const SYNC_COOLDOWN_MS = 10_000;
+let syncCooldownUntil = 0;
+let cooldownTimer: ReturnType<typeof setInterval> | undefined;
+
+/** 冷卻剩餘秒數（無條件進位；0 表示未在冷卻）。 */
+function cooldownLeft(): number {
+  return Math.max(0, Math.ceil((syncCooldownUntil - Date.now()) / 1000));
+}
+
+/** 同步按鈕當下應顯示的文字（冷卻中附倒數）。 */
+function syncLabel(): string {
+  const left = cooldownLeft();
+  return left > 0 ? `${SYNC_LABEL}（${left}）` : SYNC_LABEL;
+}
+
+/**
+ * 每秒直接更新按鈕（文字倒數 + 禁用樣式），不整頁重繪——避免沖掉欄位焦點。
+ * 同一時刻只保留一個計時器；冷卻結束時自我清除並恢復按鈕。
+ */
+function startCooldownTicker(): void {
+  if (cooldownTimer) return; // 已在跑
+  const tick = (): void => {
+    const btn = document.querySelector<HTMLButtonElement>('#set-sync');
+    if (cooldownLeft() <= 0) {
+      clearInterval(cooldownTimer);
+      cooldownTimer = undefined;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = SYNC_LABEL;
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+      }
+      return;
+    }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = syncLabel();
+      btn.style.opacity = '.55';
+      btn.style.cursor = 'not-allowed';
+    }
+  };
+  tick(); // 立即套用一次
+  cooldownTimer = setInterval(tick, 1000);
+}
+
 export const settings: View = {
   render() {
+    const syncOnCooldown = cooldownLeft() > 0;
     const seg = CURRENCIES.map(
       (c) => `<div class="opt ${store.baseCurrency === c.key ? 'on' : ''}" data-cur="${c.key}">${c.label}</div>`,
     ).join('');
@@ -76,10 +126,25 @@ export const settings: View = {
                 <span class="ink-2" style="font:500 12px/1 var(--sans);">每 10 分鐘 · 僅前景</span>
               </div>
             </div>
+            <div class="field">
+              <span class="label">貢獻查價</span>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div class="toggle ${store.contribute ? 'on' : 'off'}" data-contribute><div class="knob"></div></div>
+                <span class="ink-2" style="font:500 12px/1 var(--sans);">向指數伺服器領派工、回報查價</span>
+              </div>
+            </div>
+            <div class="field">
+              <span class="label">官方查價上限</span>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <input id="set-rate" type="number" min="0" step="1" value="${store.officialRateLimitPerMin}"
+                  class="select" style="width:88px;text-align:right;" />
+                <span class="ink-2" style="font:500 12px/1 var(--sans);">件 / 分鐘（0＝不額外限制）</span>
+              </div>
+            </div>
           </div>
 
           <div style="margin-top:auto;display:flex;align-items:center;gap:14px;">
-            <button class="btn btn-dark" id="set-sync" style="height:42px;padding:0 24px;">立即同步並清點</button>
+            <button class="btn btn-dark" id="set-sync" ${syncOnCooldown ? 'disabled' : ''} style="height:42px;padding:0 24px;${syncOnCooldown ? 'opacity:.55;cursor:not-allowed;' : ''}">${syncLabel()}</button>
             <span class="hand" style="font-size:16px;">目前 ${STASH_ITEMS.length} 件 · 上次同步 · ${lastSyncText(store.lastSync)}</span>
           </div>
         </div>
@@ -105,8 +170,38 @@ export const settings: View = {
       }),
     );
 
+    // 貢獻查價開關：持久化並即時起停派工代行。
+    root.querySelector<HTMLElement>('[data-contribute]')?.addEventListener('click', () => {
+      const on = !store.contribute;
+      saveContribute(on);
+      if (on) startContribution(store.league);
+      else stopContribution();
+      update((s) => {
+        s.contribute = on;
+      });
+    });
+
+    // 官方查價速率上限：離開欄位即套用到主進程並持久化。
+    root.querySelector<HTMLInputElement>('#set-rate')?.addEventListener('change', (e) => {
+      const n = Math.max(0, Math.floor(Number((e.target as HTMLInputElement).value) || 0));
+      saveRateLimit(n);
+      applyOfficialRateLimit(n);
+      update((s) => {
+        s.officialRateLimitPerMin = n;
+      });
+    });
+
     // 立即同步：忽略快取重抓當前聯盟倉庫，完成後更新「上次同步」並重繪。
-    root.querySelector<HTMLElement>('#set-sync')?.addEventListener('click', () => syncLeague(true));
+    // 點擊後禁用按鈕 10 秒（防連點），冷卻狀態存模組層、跨重繪存活。
+    const syncBtn = root.querySelector<HTMLButtonElement>('#set-sync');
+    syncBtn?.addEventListener('click', () => {
+      if (cooldownLeft() > 0) return; // 冷卻中：忽略
+      syncCooldownUntil = Date.now() + SYNC_COOLDOWN_MS;
+      syncLeague(true);
+      startCooldownTicker(); // 立即套用禁用 + 啟動每秒倒數
+    });
+    // 進入頁面時若仍在冷卻中，續跑倒數讓新按鈕同步顯示並準時恢復。
+    if (cooldownLeft() > 0) startCooldownTicker();
 
     // 連接帳號：開啟 OAuth 流程（系統瀏覽器 + loopback）；成功後寫入 store 並重繪。
     const loginBtn = root.querySelector<HTMLButtonElement>('#auth-login');

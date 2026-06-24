@@ -43,6 +43,41 @@ const SAMPLE = 10; // 通貨 exchange 取線上最便宜的前 N 筆做樣本
 // 大幅減少 fetch 呼叫量（守 rate limit），面板也不再塞滿上百筆。
 const MAX_ITEM_RESULTS = 30;
 
+// 回報指數伺服器用的「信任憑證」標頭（見 TREASURER-INTEGRATION.md §4）：原樣轉送官方 search 回應的特徵 header。
+const TRUST_HEADERS = [
+  "date",
+  "x-rate-limit-policy",
+  "x-rate-limit-rules",
+  "x-rate-limit-ip",
+  "x-rate-limit-ip-state",
+  "cf-ray",
+  "request-id",
+  "server",
+];
+function pickTrustHeaders(h: Record<string, string>): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const k of TRUST_HEADERS) {
+    const v = h[k];
+    if (v !== undefined) out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * 設定官方查價的「使用者額外速率上限」（件/分鐘）。<=0 取消額外限制。
+ * 套在 search 佇列（每件物品 1 次 search），等同限制「每分鐘最多查幾件」，與官方標頭自校正並存取最嚴者。
+ */
+export function setOfficialRateCap(perMinute: number): void {
+  searchLimiter.setUserCap(perMinute > 0 ? [{ hits: perMinute, period: 60 }] : []);
+}
+
+/** 含原始 icon 與信任標頭的查價結果（供回報指數伺服器）。 */
+export interface ItemPriceDetailed {
+  quote: PriceQuote | null;
+  icon?: string;
+  officialHeaders?: Record<string, string>;
+}
+
 /** 取指定幣別掛單的代表價（去離群；無該幣別掛單回 null）。 */
 function medianForCurrency(listings: PriceListing[], currency: string): number | null {
   const amounts = listings.filter((l) => l.currency === currency).map((l) => l.amount);
@@ -87,7 +122,10 @@ interface SearchResponse {
   result: string[];
 }
 interface FetchResponse {
-  result: { listing?: { price?: { amount?: number; currency?: string } } }[];
+  result: {
+    listing?: { price?: { amount?: number; currency?: string } };
+    item?: { icon?: string };
+  }[];
 }
 interface ExchangeOffer {
   exchange?: { amount?: number; currency?: string };
@@ -95,6 +133,70 @@ interface ExchangeOffer {
 }
 interface ExchangeResponse {
   result: Record<string, { listing?: { offers?: ExchangeOffer[] } }>;
+}
+
+/**
+ * 取得具名物品（傳奇 / 裝備 / 命運卡）的估價，並一併回傳原始 icon 與信任標頭（供回報指數伺服器）。
+ * 走 search → fetch 兩段式，各自過佇列。
+ * @param name 物品名（傳奇用）；命運卡等以 type 查者傳空字串，name 為空時不送入 query。
+ * @param rarity 帶 "unique" 等可用 type_filters 限定稀有度，避免同名基底混入。
+ */
+export async function getItemPriceDetailed(
+  league: string,
+  name: string,
+  type: string,
+  rarity?: string,
+): Promise<ItemPriceDetailed> {
+  const headers = tradeHeaders();
+
+  // 一律優先「即刻購買」：sale_type=priced 只取有一口價(buyout/fixed)的掛單，排除面議單。
+  // 帶 rarity 時再用 type_filters 限定（如 unique），避免同名基底的其他稀有度混入。
+  const filters: Record<string, unknown> = {
+    trade_filters: { filters: { sale_type: { option: "priced" } } },
+  };
+  if (rarity) {
+    filters["type_filters"] = { filters: { rarity: { option: rarity } } };
+  }
+  // name 為空（如命運卡只用 type 查）時不放入 query，避免官方判 400。
+  const query: Record<string, unknown> = {
+    status: { option: "online" },
+    type,
+    stats: [{ type: "and", filters: [] }],
+    filters,
+  };
+  if (name) query["name"] = name;
+  const body = { query, sort: { price: "asc" } };
+  // throttle:false → 僅由 searchLimiter（依回應標頭動態校正）管控，不被全域靜態節流二次拖慢。
+  const search = await searchLimiter.run<SearchResponse>(() =>
+    POST(SEARCH_ENDPOINTS.search(league), body, { headers, throttle: false }),
+  );
+  const officialHeaders = search.success ? pickTrustHeaders(search.headers) : undefined;
+  const detailed: ItemPriceDetailed = { quote: null };
+  if (officialHeaders) detailed.officialHeaders = officialHeaders;
+  if (!search.success || !search.data.result?.length) return detailed;
+
+  // 只取最便宜的前 MAX_ITEM_RESULTS 筆（search 已 price asc）；超過的不抓，省 fetch 呼叫。
+  // fetch 端點每次上限 10 個 id，故把結果清單分批、逐批取明細後彙總；
+  // 每批都過 fetchLimiter（多批時會自動排隊/退避以守住 rate limit）。
+  const ids = search.data.result.slice(0, MAX_ITEM_RESULTS);
+  const listings: PriceListing[] = [];
+  let icon: string | undefined;
+  for (let i = 0; i < ids.length; i += 10) {
+    const chunk = ids.slice(i, i + 10);
+    const fetched = await fetchLimiter.run<FetchResponse>(() =>
+      GET(SEARCH_ENDPOINTS.fetch(chunk, search.data.id), { headers, throttle: false }),
+    );
+    if (!fetched.success) break; // 某批失敗就停，已取得的仍計入估價
+    for (const r of fetched.data.result ?? []) {
+      if (!icon && r.item?.icon) icon = r.item.icon;
+      const p = r.listing?.price;
+      if (!p || p.amount === undefined || !p.currency) continue;
+      listings.push({ amount: p.amount, currency: p.currency });
+    }
+  }
+  detailed.quote = quoteFrom(listings);
+  if (icon) detailed.icon = icon;
+  return detailed;
 }
 
 /**
@@ -108,48 +210,7 @@ export async function getItemPrice(
   type: string,
   rarity?: string,
 ): Promise<PriceQuote | null> {
-  const headers = tradeHeaders();
-
-  // 一律優先「即刻購買」：sale_type=priced 只取有一口價(buyout/fixed)的掛單，排除面議單。
-  // 帶 rarity 時再用 type_filters 限定（如 unique），避免同名基底的其他稀有度混入。
-  const filters: Record<string, unknown> = {
-    trade_filters: { filters: { sale_type: { option: "priced" } } },
-  };
-  if (rarity) {
-    filters["type_filters"] = { filters: { rarity: { option: rarity } } };
-  }
-  const query = {
-    status: { option: "online" },
-    name,
-    type,
-    stats: [{ type: "and", filters: [] }],
-    filters,
-  };
-  const body = { query, sort: { price: "asc" } };
-  // throttle:false → 僅由 searchLimiter（依回應標頭動態校正）管控，不被全域靜態節流二次拖慢。
-  const search = await searchLimiter.run<SearchResponse>(() =>
-    POST(SEARCH_ENDPOINTS.search(league), body, { headers, throttle: false }),
-  );
-  if (!search.success || !search.data.result?.length) return null;
-
-  // 只取最便宜的前 MAX_ITEM_RESULTS 筆（search 已 price asc）；超過的不抓，省 fetch 呼叫。
-  // fetch 端點每次上限 10 個 id，故把結果清單分批、逐批取明細後彙總；
-  // 每批都過 fetchLimiter（多批時會自動排隊/退避以守住 rate limit）。
-  const ids = search.data.result.slice(0, MAX_ITEM_RESULTS);
-  const listings: PriceListing[] = [];
-  for (let i = 0; i < ids.length; i += 10) {
-    const chunk = ids.slice(i, i + 10);
-    const fetched = await fetchLimiter.run<FetchResponse>(() =>
-      GET(SEARCH_ENDPOINTS.fetch(chunk, search.data.id), { headers, throttle: false }),
-    );
-    if (!fetched.success) break; // 某批失敗就停，已取得的仍計入估價
-    for (const r of fetched.data.result ?? []) {
-      const p = r.listing?.price;
-      if (!p || p.amount === undefined || !p.currency) continue;
-      listings.push({ amount: p.amount, currency: p.currency });
-    }
-  }
-  return quoteFrom(listings);
+  return (await getItemPriceDetailed(league, name, type, rarity)).quote;
 }
 
 /**
